@@ -1,0 +1,226 @@
+'use client'
+
+import React, { useState } from 'react'
+import { motion } from 'framer-motion'
+import Link from 'next/link'
+import { navigation, type NavEntry } from './navigation'
+
+type TopBarProps = {
+  reduce: boolean | null
+  fast: any
+  menuOpen: boolean
+  setMenuOpen: (open: boolean) => void
+}
+
+declare global {
+  function Play(v?: any): void
+}
+
+const itemBaseClasses =
+  'inline-flex items-center justify-center px-[15px] font-bold text-[1rem] text-white uppercase min-h-[15vh] max-h-[15vh] transition-colors'
+
+function renderLink(entry: NavEntry) {
+  if (entry.external && entry.href) {
+    return (
+      <a
+        href={entry.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={itemBaseClasses}
+      >
+        {entry.label}
+      </a>
+    )
+  }
+
+  if (entry.href) {
+    return (
+      <Link href={entry.href} className={itemBaseClasses}>
+        {entry.label}
+      </Link>
+    )
+  }
+
+  return (
+    <span className={`${itemBaseClasses} cursor-default`}>
+      {entry.label}
+    </span>
+  )
+}
+
+function TopLevelItem({ entry }: { entry: NavEntry }) {
+  if (!entry.children || entry.children.length === 0) {
+    return (
+      <li className="item relative inline-flex items-center justify-center cursor-pointer min-h-[15vh] max-h-[15vh] border-l border-[#141433] hover:bg-[#1F1F3E]">
+        {renderLink(entry)}
+      </li>
+    )
+  }
+
+  const [open, setOpen] = useState(false)
+
+  const handleBlur = (event: React.FocusEvent<HTMLLIElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      setOpen(false)
+    }
+  }
+
+  const easeOutExpo = [0.16, 1, 0.3, 1] as const
+
+  const submenuVariants = {
+    closed: {
+      opacity: 0,
+      y: -8,
+      scale: 0.96,
+      pointerEvents: 'none' as const,
+      transition: { duration: 0.12, ease: easeOutExpo },
+    },
+    open: {
+      opacity: 1,
+      y: 0,
+      scale: 1,
+      pointerEvents: 'auto' as const,
+      transition: { duration: 0.18, ease: easeOutExpo },
+    },
+  }
+
+  const submenuItemVariants = {
+    closed: { opacity: 0, y: -6 },
+    open: { opacity: 1, y: 0, transition: { duration: 0.16, ease: easeOutExpo } },
+  }
+
+  return (
+    <motion.li
+      className="item relative inline-flex items-center justify-center cursor-pointer min-h-[15vh] max-h-[15vh] border-l border-[#141433] hover:bg-[#1F1F3E]"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onFocusCapture={() => setOpen(true)}
+      onBlurCapture={handleBlur}
+    >
+      <span className={`${itemBaseClasses} transition-colors ${open ? 'text-[#DDDDDD]' : ''}`}>{entry.label}</span>
+      <motion.ul
+        variants={submenuVariants}
+        initial="closed"
+        animate={open ? 'open' : 'closed'}
+        className="submenu absolute top-[70px] w-[200px] p-[10px] rounded-[5px] bg-[rgba(20,20,51,.9)] z-10 flex flex-col justify-center shadow-lg shadow-black/40"
+        style={{ originY: 0 }}
+      >
+        {entry.children.map((child) => (
+          <motion.li
+            key={child.label}
+            variants={submenuItemVariants}
+            className="list-none p-[5px] mb-[5px] font-bold text-[0.875rem] text-[#BEBECE] hover:bg-[#2596FF] hover:text-white rounded-[4px] last:mb-0"
+          >
+            {child.external && child.href ? (
+              <a
+                href={child.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block px-2 py-1"
+              >
+                {child.label}
+              </a>
+            ) : child.href ? (
+              <Link href={child.href} className="block px-2 py-1">
+                {child.label}
+              </Link>
+            ) : (
+              <span className="block px-2 py-1 cursor-default">{child.label}</span>
+            )}
+          </motion.li>
+        ))}
+      </motion.ul>
+    </motion.li>
+  )
+}
+
+export default function TopBar({ reduce, fast, menuOpen, setMenuOpen }: TopBarProps) {
+  return (
+    <motion.section
+      layout
+      className="navtop w-full min-h-[15vh] max-h-[15vh] bg-[#25254D] border-b border-[#141433] z-[999]"
+      initial={reduce ? { opacity: 0 } : { opacity: 0, y: -10 }}
+      animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0 }}
+      transition={fast as any}
+    >
+      <div className="container max-w-[1200px] mx-auto px-4">
+        <div className="bar-top flex w-full min-h-[15vh] max-h-[15vh] items-center justify-between">
+          <div className="left flex items-center flex-1 min-w-0">
+            <div
+              className="avatar flex justify-center items-end min-w-[80px] h-[70px] rounded-[4px] mr-[10px] bg-[#303060] bg-cover bg-center"
+              style={{ backgroundImage: 'url(./img/bgdefault.png)' }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                id="avatar-stream"
+                src="https://www.habbo.fr/habbo-imaging/avatarimage?user=Decrypt&action=&direction=2&head_direction=3&img_format=png&gesture=sml&headonly=0&size=m&dance=0&frame_num=0&effect="
+                alt="Habbo DJ"
+              />
+            </div>
+            <div className="info-stream flex flex-col justify-between w-full">
+              <div className="text mb-[7px]">
+                <span className="text-[1rem] leading-[20px] text-white">
+                  <span id="programming-stream" className="font-bold">
+                    HabbOne Radio
+                  </span>{' '}
+                  par <span id="announcer-stream" className="font-bold">Decrypt</span>
+                </span>
+              </div>
+              <div className="range flex items-center flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="pause flex items-center justify-center w-[30px] h-[30px] bg-[#2596FF] rounded-[4px] text-white mr-[10px]"
+                  onClick={() => { try { Play(0.6) } catch {} }}
+                  aria-label="Lancer la radio"
+                >
+                  <i className="material-icons" id="pause-stream">play_arrow</i>
+                </button>
+                <div className="box-volume flex items-center w-[183px] h-[30px] bg-[#141433] rounded-[4px] mr-[10px]">
+                  <input
+                    type="range"
+                    className="volume appearance-none w-[150px] h-[5px] ml-[10%] rounded-[10px]"
+                    id="volume"
+                    min={0}
+                    max={100}
+                    defaultValue={60}
+                    step={1}
+                    aria-label="Volume radio"
+                  />
+                </div>
+                <div className="listens flex items-center">
+                  <i className="material-icons icon max-w-[30px] p-[5px] pl-[6px] text-[1.125rem] bg-[#141433] rounded-[4px] text-white mr-[5px]">personnes</i>
+                  <span id="listeners-stream" className="font-bold text-[0.875rem] text-[#BEBECE]"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <nav
+            id="navbar-main"
+            className="navbar hidden lg:flex justify-end min-h-[15vh] max-h-[15vh] p-0 ml-auto mr-[2rem]"
+            aria-label="Navigation principale"
+          >
+            <ul className="menu flex list-none p-0 m-0 w-full">
+              {navigation.map((entry) => (
+                <TopLevelItem key={entry.label} entry={entry} />
+              ))}
+            </ul>
+          </nav>
+
+          <div className="ml-auto flex items-center lg:hidden">
+            <button
+              type="button"
+              aria-label="Ouvrir le menu"
+              aria-expanded={menuOpen}
+              aria-controls="mobile-nav"
+              className="rounded-[4px] h-[40px] w-[44px] grid place-items-center text-[#BEBECE] bg-[rgba(255,255,255,.1)] hover:bg-[#2596FF] hover:text-white"
+              onClick={() => setMenuOpen(true)}
+            >
+              <i className="material-icons" aria-hidden>menu</i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </motion.section>
+  )
+}

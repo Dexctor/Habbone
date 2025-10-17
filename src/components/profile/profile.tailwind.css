@@ -1,0 +1,106 @@
+/* Local profile page styling without Tailwind @apply to keep build simple */
+
+.profile-page {
+  width: 100%;
+  min-height: 74vh;
+  margin-top: 70px;
+  margin-bottom: 50px;
+}
+
+.profile-container {
+  width: 100%;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+.profile-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 11.7vh;
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
+  padding-top: 15px;
+  padding-bottom: 15px;
+  background-color: var(--bg-800, #1f1f3e);
+  border: 1px solid var(--bg-900, #141433);
+  border-bottom-width: 0;
+  border-top-left-radius: 0.25rem;
+  border-top-right-radius: 0.25rem;
+}
+
+.profile-bar-full {
+  border-bottom-width: 1px;
+  border-radius: 0.25rem;
+}
+
+.profile-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-400);
+  font-size: 1.125rem;
+  line-height: 22px;
+  text-shadow: 0 1px 2px var(--text-shadow);
+}
+
+.btn-primary {
+  text-transform: uppercase;
+  border-radius: 0.25rem;
+  color: var(--text-500);
+  background-color: var(--shadow-200);
+  padding: 0.5rem 0.75rem;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.btn-primary:hover {
+  color: var(--text-100);
+  background-color: var(--blue-500);
+}
+
+.btn-primary:active {
+  color: var(--text-400);
+  background-color: var(--blue-700);
+}
+
+.u-blue-500 {
+  background-color: var(--blue-500);
+}
+
+.u-blue-700 {
+  background-color: var(--blue-700);
+}
+
+.u-red-300 {
+  background-color: var(--red-300);
+}
+
+.u-red-500 {
+  background-color: var(--red-500);
+}
+
+.u-yellow-500 {
+  background-color: var(--yellow-500);
+}
+
+.profile-page .scroll-area::-webkit-scrollbar-track {
+  background-color: var(--bg-700);
+}
+
+.profile-page .scroll-area::-webkit-scrollbar {
+  width: 10px;
+  background: var(--bg-900);
+}
+
+.profile-page .scroll-area::-webkit-scrollbar-thumb {
+  background: var(--bg-900);
+  max-height: 5px;
+  border-radius: 50px;
+}
