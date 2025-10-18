@@ -2,6 +2,18 @@
 
 export const HABBO_API_BASE = process.env.HABBO_API_BASE || 'https://www.habbo.fr';
 
+const HOTEL_BASES: Record<string, string> = {
+  fr: 'https://www.habbo.fr',
+  com: 'https://www.habbo.com',
+  'com.br': 'https://www.habbo.com.br',
+};
+
+export function resolveHotelBase(hotel?: string) {
+  if (!hotel) return HABBO_API_BASE;
+  const normalized = hotel.toLowerCase();
+  return HOTEL_BASES[normalized] || HABBO_API_BASE;
+}
+
 export interface HabboUserCore {
   uniqueId: string; // e.g. hhus-abcde12345
   name: string;
@@ -41,9 +53,22 @@ export async function getHabboUserByName(name: string): Promise<HabboUserCore> {
   return fetchJson<HabboUserCore>(url.toString());
 }
 
+export async function getHabboUserByNameForHotel(name: string, hotel?: string): Promise<HabboUserCore> {
+  const base = resolveHotelBase(hotel);
+  const url = new URL(`${base}/api/public/users`);
+  url.searchParams.set('name', name);
+  return fetchJson<HabboUserCore>(url.toString());
+}
+
 // By uniqueId: GET /api/public/users/{id}
 export async function getHabboUserById(id: string): Promise<HabboUserCore> {
   const url = `${HABBO_API_BASE}/api/public/users/${encodeURIComponent(id)}`;
+  return fetchJson<HabboUserCore>(url);
+}
+
+export async function getHabboUserByIdForHotel(id: string, hotel?: string): Promise<HabboUserCore> {
+  const base = resolveHotelBase(hotel);
+  const url = `${base}/api/public/users/${encodeURIComponent(id)}`;
   return fetchJson<HabboUserCore>(url);
 }
 

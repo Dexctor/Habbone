@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { cn } from '@/lib/utils';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -11,8 +12,61 @@ export default function RegisterPage() {
   const [nick, setNick] = useState('');
   const [password, setPassword] = useState('');
   const [missao, setMissao] = useState('Mission Habbo: HabboOneRegister-0');
+  const [hotel, setHotel] = useState<'fr' | 'com' | 'com.br'>('fr');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [step, setStep] = useState<'form' | 'verify'>('form');
+  const [verification, setVerification] = useState<{
+    code: string;
+    expiresAt: string | null;
+    hotel: string;
+    nick: string;
+  } | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [verified, setVerified] = useState(false);
+  const [countdown, setCountdown] = useState<string | null>(null);
+
+  const expiresLabel = useMemo(() => {
+    if (!verification?.expiresAt) return null;
+    const date = new Date(verification.expiresAt);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleString();
+  }, [verification?.expiresAt]);
+
+  useEffect(() => {
+    if (!verification?.expiresAt) {
+      setCountdown(null);
+      return;
+    }
+    const target = Date.parse(verification.expiresAt);
+    if (Number.isNaN(target)) {
+      setCountdown(null);
+      return;
+    }
+    let notified = false;
+    const tick = () => {
+      const diff = target - Date.now();
+      if (diff <= 0) {
+        setCountdown('00:00');
+        if (!notified) {
+          setStatusMessage('Code expiré. Régénérez un code.');
+          notified = true;
+        }
+        return true;
+      }
+      const minutes = Math.floor(diff / 60000);
+      const seconds = Math.floor((diff % 60000) / 1000);
+      setCountdown(`${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`);
+      return false;
+    };
+    tick();
+    const id = setInterval(() => {
+      if (tick()) clearInterval(id);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [verification?.expiresAt]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -25,6 +79,7 @@ export default function RegisterPage() {
         body: JSON.stringify({
           nick: nick.trim(),
           password,
+          hotel,
           missao: missao.trim() || undefined,
         }),
       });
@@ -36,28 +91,187 @@ export default function RegisterPage() {
         return;
       }
 
-      // Inscription ok → connexion automatique
-      const login = await signIn('credentials', {
-        redirect: false,
-        nick: nick.trim(),
-        password,
-      });
-
-      if (login?.error) {
-        // Si la connexion auto échoue, rediriger vers /login
-        router.push('/login');
-        router.refresh();
+      const code = data?.verification?.code as string | undefined;
+      const expiresAt = data?.verification?.expiresAt as string | undefined;
+      const verificationHotel = (data?.verification?.hotel as string | undefined) || hotel;
+      if (!code) {
+        setError("Code de vérification manquant. Veuillez réessayer.");
         return;
       }
 
-      // Succès complet → home
-      router.push('/');
-      router.refresh();
+      setVerification({
+        code,
+        expiresAt: expiresAt || null,
+        hotel: verificationHotel,
+        nick: nick.trim(),
+      });
+      setCountdown(null);
+      setStatusMessage(
+        `Ajoutez le code à votre mission Habbo puis cliquez sur “Vérifier mon compte”.`
+      );
+      setStep('verify');
     } catch (e: any) {
       setError(e?.message || 'Erreur réseau');
     } finally {
       setLoading(false);
     }
+  }
+
+  async function checkStatus() {
+    if (!verification || checking) return;
+    if (verification.expiresAt && Date.parse(verification.expiresAt) <= Date.now()) {
+      setStatusMessage('Code expiré. Régénérez un code.');
+      return;
+    }
+    setChecking(true);
+    setStatusMessage(null);
+    try {
+      const res = await fetch('/api/verify/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nick: verification.nick, code: verification.code }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 410) {
+          setStatusMessage(data?.error || 'Code expiré. Régénérez un code.');
+        } else {
+          setStatusMessage(data?.error || 'Vérification impossible pour le moment.');
+        }
+        return;
+      }
+      if (data?.verified) {
+        setVerified(true);
+        setStatusMessage('Compte vérifié ! Connexion en cours…');
+        const login = await signIn('credentials', {
+          redirect: false,
+          nick: verification.nick,
+          password,
+        });
+        if (login?.error) {
+          setStatusMessage(login.error || 'Connexion impossible. Veuillez essayer via /login.');
+          return;
+        }
+        router.push('/');
+        router.refresh();
+      } else {
+        setStatusMessage('Le code n’est pas encore détecté. Réessayez dans quelques secondes.');
+      }
+    } catch (error: any) {
+      setStatusMessage(error?.message || 'Erreur de vérification.');
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  async function regenerateCode() {
+    if (!verification || regenerating) return;
+    setRegenerating(true);
+    setStatusMessage(null);
+    try {
+      const res = await fetch('/api/verify/regenerate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nick: verification.nick }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStatusMessage(data?.error || 'Impossible de régénérer le code pour le moment.');
+        return;
+      }
+      const code = data?.code as string | undefined;
+      if (!code) {
+        setStatusMessage('Ce compte est déjà vérifié ou ne nécessite plus de code.');
+        if (data?.alreadyVerified) {
+          setVerified(true);
+        }
+        return;
+      }
+      setVerification((prev) =>
+        prev
+          ? {
+              ...prev,
+              code,
+              expiresAt: data?.expiresAt || null,
+            }
+          : prev
+      );
+      setCountdown(null);
+      setStatusMessage('Nouveau code généré. Pensez à mettre à jour votre mission.');
+    } catch (error: any) {
+      setStatusMessage(error?.message || 'Erreur lors de la régénération du code.');
+    } finally {
+      setRegenerating(false);
+    }
+  }
+
+  if (step === 'verify' && verification) {
+    return (
+      <main className="max-w-md mx-auto p-6 space-y-6">
+        <h1 className="text-2xl font-bold">Vérification du compte</h1>
+        <p className="text-sm opacity-80">
+          Pour confirmer que vous êtes bien le propriétaire du compte Habbo{' '}
+          <strong>{verification.nick}</strong>, ajoutez le code ci-dessous dans votre mission Habbo (
+          {verification.hotel === 'fr' ? 'Habbo.fr' : verification.hotel === 'com' ? 'Habbo.com' : 'Habbo.com.br'})
+          puis cliquez sur « Vérifier mon compte ».
+        </p>
+
+        <div className="rounded border border-white/10 bg-white/5 p-4 space-y-3">
+          <div>
+            <p className="text-xs uppercase opacity-70">Code de vérification</p>
+            <code className="text-lg font-semibold">{verification.code}</code>
+          </div>
+          {(verification.expiresAt && (countdown || expiresLabel)) && (
+            <p className="text-xs opacity-70">
+              Expire {countdown ? `dans ${countdown} ` : ''}
+              {expiresLabel ? <span className="font-medium">({expiresLabel})</span> : null}
+            </p>
+          )}
+        </div>
+
+        {statusMessage && (
+          <div className="text-sm border border-white/10 rounded p-3 bg-white/5">
+            {statusMessage}
+          </div>
+        )}
+
+        <div className="flex flex-col gap-3">
+          <button
+            type="button"
+            onClick={() => void checkStatus()}
+            disabled={checking || verified}
+            className={cn(
+              'w-full rounded px-4 py-2 font-medium',
+              checking || verified
+                ? 'bg-white/40 text-black/60 cursor-not-allowed'
+                : 'bg-white text-black hover:opacity-90'
+            )}
+          >
+            {verified ? 'Compte vérifié' : checking ? 'Vérification…' : 'Vérifier mon compte'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void regenerateCode()}
+            disabled={regenerating}
+            className="w-full rounded px-4 py-2 border border-white/20 hover:border-white/40"
+          >
+            {regenerating ? 'Génération…' : 'Régénérer un code'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setStep('form');
+              setStatusMessage(null);
+              setVerification(null);
+              setCountdown(null);
+            }}
+            className="w-full rounded px-4 py-2 border border-transparent text-sm opacity-70 hover:opacity-100"
+          >
+            Revenir au formulaire
+          </button>
+        </div>
+      </main>
+    );
   }
 
   return (
@@ -102,6 +316,26 @@ export default function RegisterPage() {
             placeholder="••••••••"
             autoComplete="new-password"
           />
+        </div>
+
+        <div className="space-y-1">
+          <span className="text-sm opacity-80">Hôtel Habbo</span>
+          <div className="flex items-center gap-3 text-sm">
+            {(['fr', 'com', 'com.br'] as const).map((value) => (
+              <label key={value} className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="hotel"
+                  value={value}
+                  checked={hotel === value}
+                  onChange={() => setHotel(value)}
+                />
+                <span>
+                  {value === 'fr' ? 'Habbo.fr' : value === 'com' ? 'Habbo.com' : 'Habbo.com.br'}
+                </span>
+              </label>
+            ))}
+          </div>
         </div>
 
         <div className="space-y-1">

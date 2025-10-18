@@ -28,6 +28,8 @@ export const CheckUserQuerySchema = z.object({
   nick: z.string().trim().min(1, 'nick requis').max(32, 'nick trop long'),
 })
 
+export const HabboHotelEnum = z.enum(['fr', 'com', 'com.br'])
+
 export const RegisterBodySchema = z.object({
   nick: z.string().trim().min(3, 'nick trop court').max(32, 'nick trop long'),
   password: z.string().min(6, 'mot de passe trop court').max(128, 'mot de passe trop long'),
@@ -37,6 +39,12 @@ export const RegisterBodySchema = z.object({
     .max(254, 'email trop long')
     .optional()
     .transform((v) => (v && v.length ? v : undefined)),
+  hotel: z
+    .string()
+    .optional()
+    .transform((v) => (v ? v.toLowerCase().trim() : 'fr'))
+    .refine((v) => HabboHotelEnum.options.includes(v as any), 'hotel invalide')
+    .transform((v) => v as typeof HabboHotelEnum._type),
 })
 
 const HabboProfileLite = z.object({
@@ -52,3 +60,12 @@ export const HabboProfileQuerySchema = z
     z.object({ id: z.string().trim().min(1, 'id requis').max(128, 'id trop long') }),
   ])
   .and(HabboProfileLite)
+
+export const VerificationStatusSchema = z.object({
+  nick: z.string().trim().min(3, 'nick requis').max(32, 'nick trop long'),
+  code: z.string().trim().min(4, 'code requis').max(64, 'code trop long'),
+})
+
+export const VerificationRegenerateSchema = z.object({
+  nick: z.string().trim().min(3, 'nick requis').max(32, 'nick trop long'),
+})

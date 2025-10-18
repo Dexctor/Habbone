@@ -1,4 +1,4 @@
-﻿// src/server/directus-service.ts
+// src/server/directus-service.ts
 import 'server-only';
 
 import {
@@ -23,6 +23,8 @@ export const STORIES_TABLE = process.env.STORIES_TABLE || 'usuarios_storie';
 
 if (!DIRECTUS_URL) throw new Error('NEXT_PUBLIC_DIRECTUS_URL manquant');
 if (!SERVICE_TOKEN) throw new Error('DIRECTUS_SERVICE_TOKEN manquant');
+
+export type HabboVerificationStatus = 'pending' | 'ok' | 'failed' | 'locked';
 
 // ----- Client Directus avec service token (server-only) -----
 export const directusService = createDirectus(DIRECTUS_URL)
@@ -436,14 +438,14 @@ export function asTrue(v: any) {
     v === 'y' ||
     v === 'sim' ||
     v === 'yes' ||
-    v === 'ativo' // au cas oÃ¹
+    v === 'ativo' // au cas o?
   );
 }
 export function asFalse(v: any) {
   return !asTrue(v);
 }
 
-// ================== AccÃ¨s utilisateurs ==================
+// ================== Acc?s utilisateurs ==================
 export async function getUserByNick(nick: string) {
   const rows = await directusService.request(
     readItems(USERS_TABLE, {
@@ -461,6 +463,12 @@ export async function getUserByNick(nick: string) {
         'status',
         'role',
         'data_criacao',
+        'habbo_hotel',
+        'habbo_unique_id',
+        'habbo_verification_status',
+        'habbo_verification_code',
+        'habbo_verification_expires_at',
+        'habbo_verified_at',
       ],
     })
   );
@@ -472,16 +480,29 @@ export async function createUser(data: {
   senha: string; // plain
   email?: string | null;
   missao?: string | null;
+  habboHotel?: string | null;
+  habboUniqueId?: string | null;
+  verificationStatus?: HabboVerificationStatus;
+  verificationCode?: string | null;
+  verificationExpiresAt?: string | null;
+  verifiedAt?: string | null;
+  ativado?: 's' | 'n';
 }) {
   const payload = {
     nick: data.nick,
     senha: hashPassword(data.senha),
     email: data.email ?? null,
     missao: data.missao ?? 'Mission Habbo: HabboOneRegister-0',
-    ativado: 's', // dans ta base: 's'/'n'
+    ativado: data.ativado ?? 'n', // par défaut, attente vérification
     banido: 'n',
     data_criacao: new Date().toISOString(),
-    // status omis: laisser Directus dÃ©finir la valeur par dÃ©faut si nÃ©cessaire
+    habbo_hotel: data.habboHotel ?? null,
+    habbo_unique_id: data.habboUniqueId ?? null,
+    habbo_verification_status: data.verificationStatus ?? ('pending' as HabboVerificationStatus),
+    habbo_verification_code: data.verificationCode ?? null,
+    habbo_verification_expires_at: data.verificationExpiresAt ?? null,
+    habbo_verified_at: data.verifiedAt ?? null,
+    // status omis: laisser Directus d?finir la valeur par d?faut si n?cessaire
   };
   return directusService.request(createItem(USERS_TABLE, payload));
 }
@@ -492,11 +513,37 @@ export async function upgradePasswordToBcrypt(userId: number, plain: string) {
   );
 }
 
+export async function updateUserVerification(
+  userId: number,
+  patch: Partial<{
+    habbo_hotel: string | null;
+    habbo_unique_id: string | null;
+    habbo_verification_status: HabboVerificationStatus | null;
+    habbo_verification_code: string | null;
+    habbo_verification_expires_at: string | null;
+    habbo_verified_at: string | null;
+    ativado: 's' | 'n';
+  }>
+) {
+  return directusService.request(updateItem(USERS_TABLE, userId, patch));
+}
+
+export async function markUserAsVerified(userId: number) {
+  const nowIso = new Date().toISOString();
+  return updateUserVerification(userId, {
+    habbo_verification_status: 'ok',
+    habbo_verification_code: null,
+    habbo_verification_expires_at: null,
+    habbo_verified_at: nowIso,
+    ativado: 's',
+  });
+}
+
 // ================== Habbo snapshot cache (best-effort) ==================
 /**
  * Tente de stocker un snapshot basique du profil Habbo dans la table utilisateurs.
- * Ne fait rien si les colonnes n'existent pas cÃ´tÃ© Directus (erreur avalÃ©e).
- * Colonnes attendues si vous souhaitez persister ces donnÃ©es:
+ * Ne fait rien si les colonnes n'existent pas c?t? Directus (erreur aval?e).
+ * Colonnes attendues si vous souhaitez persister ces donn?es:
  *  - habbo_unique_id (string)
  *  - habbo_name (string)
  *  - habbo_core_snapshot (json)
@@ -612,11 +659,7 @@ export async function adminListForumTopics(limit = 200) {
         'imagem',
         'autor',
         'data',
-        'views',
-        'fixo',
-        'fechado',
         'status',
-        'categoria',
         'cat_id',
       ],
     })
@@ -624,17 +667,45 @@ export async function adminListForumTopics(limit = 200) {
 }
 
 export async function listForumTopicsWithCategories(limit = 50) {
-  return adminListForumTopics(limit);
+  try {
+    return await directusService.request(
+      readItems('forum_topicos', {
+        limit,
+        sort: ['-data'],
+        fields: [
+          'id',
+          'titulo',
+          'conteudo',
+          'imagem',
+          'autor',
+          'data',
+          'views',
+          'fixo',
+          'fechado',
+          'status',
+          'cat_id',
+        ],
+      })
+    )
+  } catch (error) {
+    console.error('[directus] listForumTopicsWithCategories failed', error)
+    return []
+  }
 }
 
 export async function listForumCategoriesService() {
-  return directusService.request(
-    readItems('forum_cat' as any, {
-      limit: 100 as any,
-      sort: ['ordem', 'nome'] as any,
-      fields: ['id', 'nome', 'descricao', 'slug', 'ordem', 'status', 'imagem'] as any,
-    } as any)
-  );
+  try {
+    return await directusService.request(
+      readItems('forum_cat' as any, {
+        limit: 100 as any,
+        sort: ['nome'] as any,
+        fields: ['id', 'nome', 'status', 'imagem'] as any,
+      } as any)
+    )
+  } catch (error) {
+    console.error('[directus] listForumCategoriesService failed', error)
+    return []
+  }
 }
 
 export async function adminCreateForumPost(data: {
@@ -957,4 +1028,7 @@ export async function listStoriesService(limit = 30): Promise<unknown[]> {
   }
   return [] as any[]
 }
+
+
+
 
