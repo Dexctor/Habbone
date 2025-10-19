@@ -12,15 +12,18 @@ export default function Banner({ slow }: BannerProps) {
     <motion.section
       layout
       className="bg flex items-center justify-center w-full min-h-[400px] bg-[#272746]"
-      style={{ backgroundImage: "url('')" }}
       initial={{ opacity: 0 }}
       whileInView={{ opacity: 1 }}
       viewport={{ once: true }}
       transition={slow as any}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="https://habbone.fr/assets/img/logo.png" alt="" />
+      <img
+        src="/img/HabbOne25_Logo_DefaultAnimated2_byLFM.gif"
+        alt="HabbOne"
+        className="h-auto max-w-full"
+        loading="lazy"
+      />
     </motion.section>
   )
 }
-

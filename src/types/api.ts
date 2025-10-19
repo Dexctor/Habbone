@@ -26,6 +26,11 @@ export function buildError(error: string, opts?: { code?: string; fields?: Recor
 // Schemas
 export const CheckUserQuerySchema = z.object({
   nick: z.string().trim().min(1, 'nick requis').max(32, 'nick trop long'),
+  hotel: z
+    .string()
+    .optional()
+    .transform((v) => (v ? v.trim().toLowerCase() : undefined))
+    .refine((v) => v === undefined || HabboHotelEnum.options.includes(v as any), 'hotel invalide'),
 })
 
 export const HabboHotelEnum = z.enum(['fr', 'com', 'com.br'])
@@ -68,4 +73,9 @@ export const VerificationStatusSchema = z.object({
 
 export const VerificationRegenerateSchema = z.object({
   nick: z.string().trim().min(3, 'nick requis').max(32, 'nick trop long'),
+  hotel: z
+    .string()
+    .optional()
+    .transform((v) => (v ? v.trim().toLowerCase() : undefined))
+    .refine((v) => v === undefined || HabboHotelEnum.options.includes(v as any), 'hotel invalide'),
 })

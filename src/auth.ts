@@ -2,7 +2,8 @@
 import type { NextAuthOptions } from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import {
-  getUserByNick,
+  listUsersByNick,
+  normalizeHotelCode,
   passwordsMatch,
   upgradePasswordToBcrypt,
   isBcrypt,
@@ -11,7 +12,7 @@ import {
   listRoles,
   tryUpdateHabboSnapshotForUser,
 } from '@/server/directus-service';
-import { getHabboUserByName } from '@/server/habbo-cache';
+import { getHabboUserByNameForHotel } from '@/lib/habbo';
 
 export const authOptions: NextAuthOptions = {
   session: { strategy: 'jwt' },
@@ -27,17 +28,25 @@ export const authOptions: NextAuthOptions = {
         const password = (creds?.password as string | undefined) || '';
         if (!nick || !password) return null;
 
-        const user = await getUserByNick(nick);
+        const candidates = await listUsersByNick(nick);
+        if (!candidates.length) return null;
+
+        let user: any = null;
+        for (const candidate of candidates) {
+          if (passwordsMatch(password, candidate.senha)) {
+            user = candidate;
+            break;
+          }
+        }
+
         if (!user) return null;
+
+        const hotelCode = normalizeHotelCode((user as any)?.habbo_hotel);
 
         // Dans ta base, ativado/banido sont 's' / 'n'
         if (asTrue(user.banido)) throw new Error('Compte banni.');
         if (asFalse(user.ativado)) throw new Error('Compte non activé.');
 
-        // Vérif mot de passe (bcrypt $2y$ accepté via normalisation ou MD5 legacy)
-        if (!passwordsMatch(password, user.senha)) return null;
-
-        // Upgrade MD5 -> bcrypt uniquement si ce n'est PAS déjà du bcrypt
         if (!isBcrypt(user.senha)) {
           try {
             await upgradePasswordToBcrypt(Number(user.id), password);
@@ -46,10 +55,8 @@ export const authOptions: NextAuthOptions = {
           }
         }
 
-        // Objet minimal sérialisé dans le JWT
-        // Rafraîchit le snapshot Habbo au login (best-effort)
         try {
-          const core = await getHabboUserByName(user.nick);
+          const core = await getHabboUserByNameForHotel(user.nick, hotelCode);
           void tryUpdateHabboSnapshotForUser(Number(user.id), core);
         } catch {}
 
@@ -85,6 +92,7 @@ export const authOptions: NextAuthOptions = {
           email: user.email || null,
           avatar: user.avatar || null,
           missao: user.missao || null,
+          hotel: hotelCode,
           role,
           directusRoleId,
           directusRoleName,
@@ -100,6 +108,7 @@ export const authOptions: NextAuthOptions = {
         (token as any).nick = (user as any).nick;
         (token as any).avatar = (user as any).avatar;
         (token as any).missao = (user as any).missao;
+        (token as any).hotel = (user as any).hotel ?? 'fr';
         (token as any).role = (user as any).role ?? 'member';
         (token as any).email = (user as any).email ?? null;
         (token as any).directusRoleId = (user as any).directusRoleId ?? null;
@@ -114,6 +123,7 @@ export const authOptions: NextAuthOptions = {
         nick: (token as any).nick,
         avatar: (token as any).avatar,
         missao: (token as any).missao,
+        hotel: (token as any).hotel ?? 'fr',
         role: (token as any).role,
         email: (token as any).email,
         directusRoleId: (token as any).directusRoleId ?? null,

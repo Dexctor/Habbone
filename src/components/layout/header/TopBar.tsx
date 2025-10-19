@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
 import { navigation, type NavEntry } from './navigation'
@@ -58,12 +58,59 @@ function TopLevelItem({ entry }: { entry: NavEntry }) {
   }
 
   const [open, setOpen] = useState(false)
+  const [hoveredTrigger, setHoveredTrigger] = useState<string | null>(null)
+  const closeTimer = useRef<number | null>(null)
+
+  const clearCloseTimer = () => {
+    if (closeTimer.current) {
+      window.clearTimeout(closeTimer.current)
+      closeTimer.current = null
+    }
+  }
+
+  const openMenu = (triggerKey: string) => {
+    clearCloseTimer()
+    setHoveredTrigger(triggerKey)
+    setOpen(true)
+  }
+
+  const scheduleClose = () => {
+    clearCloseTimer()
+    closeTimer.current = window.setTimeout(() => {
+      setOpen(false)
+      setHoveredTrigger(null)
+      closeTimer.current = null
+    }, 180)
+  }
 
   const handleBlur = (event: React.FocusEvent<HTMLLIElement>) => {
     if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-      setOpen(false)
+      scheduleClose()
     }
   }
+
+  const handleMouseLeave = (event: React.MouseEvent<HTMLLIElement>) => {
+    const current = event.currentTarget
+    const related = event.relatedTarget as HTMLElement | null
+
+    if (related && current.contains(related)) {
+      return
+    }
+
+    const nextItem = related?.closest<HTMLElement>('[data-nav-item]')
+    if (nextItem && nextItem !== current) {
+      clearCloseTimer()
+      setOpen(false)
+      setHoveredTrigger(null)
+      return
+    }
+
+    scheduleClose()
+  }
+
+  useEffect(() => {
+    return () => clearCloseTimer()
+  }, [])
 
   const easeOutExpo = [0.16, 1, 0.3, 1] as const
 
@@ -91,10 +138,11 @@ function TopLevelItem({ entry }: { entry: NavEntry }) {
 
   return (
     <motion.li
+      data-nav-item
       className="item relative inline-flex items-center justify-center cursor-pointer min-h-[15vh] max-h-[15vh] border-l border-[#141433] hover:bg-[#1F1F3E]"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-      onFocusCapture={() => setOpen(true)}
+      onMouseEnter={() => openMenu(entry.label)}
+      onMouseLeave={handleMouseLeave}
+      onFocusCapture={() => openMenu(entry.label)}
       onBlurCapture={handleBlur}
     >
       <span className={`${itemBaseClasses} transition-colors ${open ? 'text-[#DDDDDD]' : ''}`}>{entry.label}</span>
@@ -102,7 +150,9 @@ function TopLevelItem({ entry }: { entry: NavEntry }) {
         variants={submenuVariants}
         initial="closed"
         animate={open ? 'open' : 'closed'}
-        className="submenu absolute top-[70px] w-[200px] p-[10px] rounded-[5px] bg-[rgba(20,20,51,.9)] z-10 flex flex-col justify-center shadow-lg shadow-black/40"
+        onMouseEnter={() => openMenu(entry.label)}
+        onMouseLeave={scheduleClose}
+        className="submenu absolute left-1/2 top-full mt-2 w-[220px] -translate-x-1/2 p-[10px] rounded-[5px] bg-[#1b1b3d] z-50 flex flex-col justify-center shadow-lg shadow-black/40"
         style={{ originY: 0 }}
       >
         {entry.children.map((child) => (
@@ -198,6 +248,7 @@ export default function TopBar({ reduce, fast, menuOpen, setMenuOpen }: TopBarPr
           <nav
             id="navbar-main"
             className="navbar hidden lg:flex justify-end min-h-[15vh] max-h-[15vh] p-0 ml-auto mr-[2rem]"
+            data-nav-container="true"
             aria-label="Navigation principale"
           >
             <ul className="menu flex list-none p-0 m-0 w-full">

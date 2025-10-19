@@ -3,10 +3,12 @@ import { NextResponse } from 'next/server';
 import {
   createUser,
   getUserByNick,
+  listUsersByNick,
+  normalizeHotelCode,
   tryUpdateHabboSnapshotForUser,
   updateUserVerification,
 } from '@/server/directus-service';
-import { getHabboUserByName } from '@/server/habbo-cache';
+import { getHabboUserByNameForHotel } from '@/lib/habbo';
 import { RegisterBodySchema, formatZodError, buildError } from '@/types/api';
 import { computeVerificationExpiry, generateVerificationCode } from '@/lib/verification';
 
@@ -26,23 +28,24 @@ export async function POST(req: Request) {
       );
     }
     const { nick: n, password: p, email, hotel } = parsed.data as any;
+    const hotelCode = normalizeHotelCode(hotel);
     const missao = raw?.missao ? String(raw?.missao).trim() : undefined;
 
-    const exists = await getUserByNick(n);
-    if (exists) {
-      return NextResponse.json(buildError('Ce pseudo est déjà pris.', { code: 'NICK_TAKEN' }), { status: 409 });
+    const existingUsers = await listUsersByNick(n);
+    if (existingUsers.some((entry: any) => normalizeHotelCode(entry?.habbo_hotel) === hotelCode)) {
+      return NextResponse.json(buildError('Ce pseudo est déjà pris pour cet hôtel.', { code: 'NICK_TAKEN' }), { status: 409 });
     }
 
-    // Étape 1: Vérifier l'existence du joueur via Habbo API (minimiser les appels)
+    // Ãtape 1: VÃ©rifier l'existence du joueur via Habbo API (minimiser les appels)
     let habboCore: any;
     try {
-      habboCore = await getHabboUserByName(n);
+      habboCore = await getHabboUserByNameForHotel(n, hotelCode);
     } catch (e: any) {
-      // 404 ou autre -> on bloque l'inscription si le pseudo n'existe pas côté Habbo
+      // 404 ou autre -> on bloque l'inscription si le pseudo n'existe pas cÃ´tÃ© Habbo
       const msg = e?.message || '';
       const notFound = /404/.test(msg);
       return NextResponse.json(
-        buildError(notFound ? "Ce pseudo n'existe pas sur Habbo." : 'Vérification Habbo indisponible, réessayez plus tard.', { code: notFound ? 'HABBO_NOT_FOUND' : 'HABBO_UNAVAILABLE' }),
+        buildError(notFound ? "Ce pseudo n'existe pas sur Habbo." : 'VÃ©rification Habbo indisponible, rÃ©essayez plus tard.', { code: notFound ? 'HABBO_NOT_FOUND' : 'HABBO_UNAVAILABLE' }),
         { status: notFound ? 400 : 502 }
       );
     }
@@ -52,20 +55,20 @@ export async function POST(req: Request) {
     const expiresDeltaMs = Date.parse(verificationExpiresAt) - Date.now();
     console.info('[register] verification payload', {
       nick: n,
-      hotel,
+      hotel: hotelCode,
       verificationCode,
       verificationExpiresAt,
       expiresDeltaMs,
       nowIso: new Date().toISOString(),
     });
 
-    // Étape 2: Créer l'utilisateur local
+    // Ãtape 2: CrÃ©er l'utilisateur local
     const user = await createUser({
       nick: n,
       senha: p,
       email: email ?? null,
       missao,
-      habboHotel: hotel,
+      habboHotel: hotelCode,
       habboUniqueId: habboCore?.uniqueId ? String(habboCore.uniqueId) : null,
       verificationStatus: 'pending',
       verificationCode,
@@ -78,7 +81,7 @@ export async function POST(req: Request) {
         habbo_verification_status: 'pending',
         habbo_verification_code: verificationCode,
         habbo_verification_expires_at: verificationExpiresAt,
-        habbo_hotel: hotel,
+        habbo_hotel: hotelCode,
         habbo_unique_id: habboCore?.uniqueId ? String(habboCore.uniqueId) : null,
       });
     } catch (patchError) {
@@ -86,7 +89,7 @@ export async function POST(req: Request) {
     }
 
     try {
-      const stored = await getUserByNick(n);
+      const stored = await getUserByNick(n, hotelCode);
       console.info('[register] stored record check', {
         nick: n,
         storedCode: stored?.habbo_verification_code ?? null,
@@ -96,7 +99,7 @@ export async function POST(req: Request) {
       console.warn('[register] unable to re-fetch user after creation', logError);
     }
 
-    // Étape 3: Stocker un snapshot basique (best-effort, n'échoue pas l'inscription)
+    // Ãtape 3: Stocker un snapshot basique (best-effort, n'Ã©choue pas l'inscription)
     void tryUpdateHabboSnapshotForUser(Number((user as any).id), habboCore);
 
     return NextResponse.json({
@@ -107,14 +110,14 @@ export async function POST(req: Request) {
       verification: {
         code: verificationCode,
         expiresAt: verificationExpiresAt,
-        hotel,
+        hotel: hotelCode,
       },
     });
   } catch (e: any) {
     const message = e?.message || 'Erreur serveur';
     const uniqueNick = /UNIQUE constraint failed|duplicate key value/i.test(message);
     if (uniqueNick) {
-      return NextResponse.json(buildError('Ce compte Habbo est déjà lié à un utilisateur.', { code: 'HABBO_ALREADY_LINKED' }), {
+      return NextResponse.json(buildError('Ce compte Habbo est dÃ©jÃ  liÃ© Ã  un utilisateur.', { code: 'HABBO_ALREADY_LINKED' }), {
         status: 409,
       });
     }

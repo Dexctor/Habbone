@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 import { VerificationStatusSchema, formatZodError, buildError } from '@/types/api'
 import {
-  getUserByNick,
+  listUsersByNick,
   markUserAsVerified,
+  normalizeHotelCode,
   updateUserVerification,
 } from '@/server/directus-service'
 import { getHabboUserByIdForHotel, getHabboUserByNameForHotel } from '@/lib/habbo'
@@ -29,17 +30,24 @@ export async function POST(req: Request) {
     const { nick, code } = parsed.data
     console.info('[verify/status] request', { nick, code })
 
-    const user = await getUserByNick(nick)
-    if (!user) {
+    const users = await listUsersByNick(nick)
+    if (!users.length) {
       console.warn('[verify/status] user not found', { nick })
       return NextResponse.json(ERROR_NOT_FOUND, { status: 404 })
     }
+
+    const lowerCode = String(code || '').toLowerCase()
+    const user =
+      users.length === 1
+        ? users[0]
+        : users.find((entry: any) => String((entry as any)?.habbo_verification_code || '').toLowerCase() === lowerCode) ??
+          users[0]
 
     const id = Number((user as any)?.id ?? 0)
     const status = String((user as any)?.habbo_verification_status || '')
     const storedCode = String((user as any)?.habbo_verification_code || '')
     const expiresAt = (user as any)?.habbo_verification_expires_at as string | null | undefined
-    const hotel = String((user as any)?.habbo_hotel || 'fr') || 'fr'
+    const hotel = normalizeHotelCode((user as any)?.habbo_hotel)
     let uniqueId = String((user as any)?.habbo_unique_id || '')
 
     console.info('[verify/status] user state', {

@@ -446,30 +446,74 @@ export function asFalse(v: any) {
 }
 
 // ================== Acc?s utilisateurs ==================
-export async function getUserByNick(nick: string) {
+const USER_FIELDS = [
+  'id',
+  'nick',
+  'senha',
+  'email',
+  'avatar',
+  'missao',
+  'ativado',
+  'banido',
+  'status',
+  'role',
+  'data_criacao',
+  'habbo_hotel',
+  'habbo_unique_id',
+  'habbo_verification_status',
+  'habbo_verification_code',
+  'habbo_verification_expires_at',
+  'habbo_verified_at',
+] as const;
+
+export function normalizeHotelCode(hotel?: string | null): 'fr' | 'com' | 'com.br' {
+  const value = typeof hotel === 'string' ? hotel.trim().toLowerCase() : '';
+  if (value === 'com') return 'com';
+  if (value === 'com.br' || value === 'br' || value === 'combr') return 'com.br';
+  return 'fr';
+}
+
+export async function listUsersByNick(nick: string) {
   const rows = await directusService.request(
     readItems(USERS_TABLE, {
       filter: { nick: { _eq: nick } },
+      limit: 50,
+      fields: USER_FIELDS,
+    })
+  );
+  return Array.isArray(rows) ? (rows as any[]) : [];
+}
+
+export async function getUserByNick(nick: string, hotel?: string | null) {
+  const normalized = hotel ? normalizeHotelCode(hotel) : null;
+  const filter =
+    normalized === null
+      ? { nick: { _eq: nick } }
+      : normalized === 'fr'
+        ? {
+            _and: [
+              { nick: { _eq: nick } },
+              {
+                _or: [
+                  { habbo_hotel: { _eq: normalized } },
+                  { habbo_hotel: { _null: true } },
+                  { habbo_hotel: { _empty: true } },
+                ],
+              },
+            ],
+          }
+        : {
+            _and: [
+              { nick: { _eq: nick } },
+              { habbo_hotel: { _eq: normalized } },
+            ],
+          };
+
+  const rows = await directusService.request(
+    readItems(USERS_TABLE, {
+      filter,
       limit: 1,
-      fields: [
-        'id',
-        'nick',
-        'senha',
-        'email',
-        'avatar',
-        'missao',
-        'ativado',
-        'banido',
-        'status',
-        'role',
-        'data_criacao',
-        'habbo_hotel',
-        'habbo_unique_id',
-        'habbo_verification_status',
-        'habbo_verification_code',
-        'habbo_verification_expires_at',
-        'habbo_verified_at',
-      ],
+      fields: USER_FIELDS,
     })
   );
   return Array.isArray(rows) && rows.length ? (rows as any[])[0] : null;

@@ -258,7 +258,7 @@ function useVerificationFlow({
       const res = await fetch('/api/verify/regenerate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nick: verification.nick }),
+        body: JSON.stringify({ nick: verification.nick, hotel: verification.hotel }),
       })
       const data = await res.json().catch(() => ({}))
 
@@ -379,10 +379,12 @@ function RegisterForm({
         </DialogHeader>
 
         <form className="space-y-5" onSubmit={onSubmit}>
-          <StatusBanner status={status} />
+          <div className="w-full">
+            <StatusBanner status={status} />
+          </div>
 
-          <div className="space-y-2">
-            <label htmlFor="register-nick" className="text-sm font-medium text-white">
+          <div className="space-y-3">
+            <label htmlFor="register-nick" className="block pb-1 text-sm font-medium text-white">
               Pseudo Habbo
             </label>
             <Input
@@ -400,8 +402,8 @@ function RegisterForm({
             />
           </div>
 
-          <div className="space-y-2">
-            <label htmlFor="register-email" className="text-sm font-medium text-white">
+          <div className="space-y-3">
+            <label htmlFor="register-email" className="block pb-1 text-sm font-medium text-white">
               Email (optionnel)
             </label>
             <Input
@@ -417,8 +419,8 @@ function RegisterForm({
             />
           </div>
 
-          <div className="space-y-2">
-            <label htmlFor="register-password" className="text-sm font-medium text-white">
+          <div className="space-y-3">
+            <label htmlFor="register-password" className="block pb-1 text-sm font-medium text-white">
               Mot de passe
             </label>
             <Input
@@ -468,11 +470,11 @@ function RegisterForm({
             Nous ne demandons jamais ton mot de passe Habbo : ces données restent internes à HabbOne.
           </div>
 
-          <div className="flex flex-col gap-3 pt-2">
+          <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-4">
             <Button
               type="submit"
               disabled={submitting}
-              className="w-full rounded-[6px] bg-[#0FD52F] px-6 py-3 text-sm font-semibold text-white uppercase tracking-wide hover:brightness-95 transition-transform hover:-translate-y-0.5 flex items-center justify-center gap-2"
+              className="flex min-w-[200px] items-center justify-center gap-2 rounded-[6px] bg-[#0FD52F] px-6 py-3 text-sm font-semibold uppercase tracking-wide text-white transition-transform hover:-translate-y-0.5 hover:brightness-95 sm:w-auto sm:flex-none"
             >
               {submitting ? (
                 <span className="inline-flex items-center gap-2">
@@ -491,7 +493,7 @@ function RegisterForm({
               variant="ghost"
               onClick={onClose}
               disabled={submitting}
-              className="w-full justify-center rounded-[6px] text-sm text-white/70 hover:text-white hover:bg-white/5"
+              className="flex min-w-[200px] items-center justify-center rounded-[6px] text-sm text-white/70 hover:bg-white/5 hover:text-white sm:w-auto sm:flex-none"
             >
               Annuler
             </Button>
@@ -585,15 +587,17 @@ function VerificationPanel({
           </ol>
         </div>
 
-        <StatusBanner status={status} />
+        <div className="w-full">
+          <StatusBanner status={status} />
+        </div>
 
-        <div className="flex w-full flex-col gap-3">
+        <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-4">
           <Button
             type="button"
             onClick={onCheck}
             disabled={checking || verified}
             className={cn(
-              'w-full rounded-[6px] bg-[#0FD52F] px-6 py-3 text-sm font-semibold text-white uppercase tracking-wide hover:brightness-95 transition-transform hover:-translate-y-0.5 flex items-center justify-center gap-2',
+              'flex min-w-[200px] items-center justify-center gap-2 rounded-[6px] bg-[#0FD52F] px-6 py-3 text-sm font-semibold uppercase tracking-wide text-white transition-transform hover:-translate-y-0.5 hover:brightness-95 sm:w-auto sm:flex-none',
               (checking || verified) && 'opacity-60 cursor-not-allowed'
             )}
           >
@@ -623,7 +627,7 @@ function VerificationPanel({
             variant="outline"
             onClick={onRegenerate}
             disabled={regenerating}
-            className="w-full rounded-[6px] border-white/30 px-6 py-3 text-sm font-semibold text-white uppercase tracking-wide hover:bg-white/10"
+            className="flex min-w-[200px] items-center justify-center rounded-[6px] border-white/30 px-6 py-3 text-sm font-semibold uppercase tracking-wide text-white hover:bg-white/10 sm:w-auto sm:flex-none"
           >
             {regenerating ? 'GÉNÉRATION…' : 'RÉGÉNÉRER UN CODE'}
           </Button>
@@ -632,7 +636,7 @@ function VerificationPanel({
             type="button"
             variant="ghost"
             onClick={onBack}
-            className="w-full justify-center rounded-[6px] text-sm text-white/70 hover:text-white hover:bg-white/5"
+            className="flex min-w-[200px] items-center justify-center rounded-[6px] text-sm text-white/70 hover:bg-white/5 hover:text-white sm:w-auto sm:flex-none"
           >
             Revenir au formulaire
           </Button>

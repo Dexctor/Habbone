@@ -172,7 +172,7 @@ export default function RegisterPage() {
       const res = await fetch('/api/verify/regenerate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nick: verification.nick }),
+        body: JSON.stringify({ nick: verification.nick, hotel: verification.hotel }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
