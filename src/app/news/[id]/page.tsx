@@ -1,6 +1,7 @@
 import Image from "next/image"
 import Link from "next/link"
 import { getServerSession } from "next-auth"
+import type { Session } from "next-auth"
 import { Newspaper } from "lucide-react"
 
 import { authOptions } from "@/auth"
@@ -9,16 +10,18 @@ import { PageHero } from "@/components/shared/page-hero"
 import { PageSection } from "@/components/shared/page-section"
 import { Badge } from "@/components/ui/badge"
 import { getOneNews, getNewsComments, mediaUrl } from "@/lib/directus"
+import type { NewsCommentRecord, NewsRecord } from "@/lib/directus"
 
 export const revalidate = 60
 
 type NewsDetailProps = {
-  params: Promise<{ id: string }> | { id: string }
+  params: Promise<{ id: string }>
 }
 
-function fmtDate(value?: string) {
-  if (!value) return ""
-  const date = new Date(value)
+function fmtDate(value?: string | number | null) {
+  if (value == null) return ""
+  const v = typeof value === "string" ? value : String(value)
+  const date = new Date(v)
   return Number.isNaN(+date) ? "" : date.toLocaleString()
 }
 
@@ -27,12 +30,8 @@ function stripHtml(input: string) {
 }
 
 export default async function NewsDetailPage(props: NewsDetailProps) {
-  const params =
-    typeof props.params === "object" && "then" in (props.params as any)
-      ? await (props.params as Promise<{ id: string }>)
-      : (props.params as { id: string })
-
-  const newsId = Number(params?.id || 0)
+  const { id } = await props.params
+  const newsId = Number(id || 0)
 
   if (!Number.isFinite(newsId) || newsId <= 0) {
     return (
@@ -42,7 +41,7 @@ export default async function NewsDetailPage(props: NewsDetailProps) {
     )
   }
 
-  const [newsItem, commentsRaw, session] = await Promise.all([
+  const [newsItem, commentsRaw, session]: [NewsRecord | null, unknown, Session | null] = await Promise.all([
     getOneNews(newsId).catch(() => null),
     getNewsComments(newsId).catch(() => []),
     getServerSession(authOptions),
@@ -56,12 +55,12 @@ export default async function NewsDetailPage(props: NewsDetailProps) {
     )
   }
 
-  const comments = Array.isArray(commentsRaw) ? commentsRaw : []
+  const comments: NewsCommentRecord[] = Array.isArray(commentsRaw) ? (commentsRaw as NewsCommentRecord[]) : []
   const excerpt = stripHtml(newsItem.descricao || "")
   const title = stripHtml(newsItem.titulo || `Article #${newsItem.id}`) || `Article #${newsItem.id}`
   const publishedAt = fmtDate(newsItem.data)
   const author = stripHtml(newsItem.autor || "")
-  const imageUrl = mediaUrl(newsItem.imagem)
+  const imageUrl = mediaUrl(newsItem.imagem || undefined)
   const isAuthenticated = Boolean(session?.user)
 
   const commentLabel = `${comments.length} commentaire${comments.length > 1 ? "s" : ""}`
@@ -137,7 +136,7 @@ export default async function NewsDetailPage(props: NewsDetailProps) {
               Aucun commentaire pour le moment.
             </p>
           ) : (
-            comments.map((comment: any) => (
+            comments.map((comment: NewsCommentRecord) => (
               <article
                 key={comment.id}
                 className="space-y-3 border border-[color:var(--bg-700)]/45 bg-[color:var(--bg-900)]/45 px-5 py-4 shadow-[0_18px_45px_-45px_rgba(0,0,0,0.55)]"

@@ -3,10 +3,11 @@
 import { Card, CardBody, CardHeader, CardTitle } from "./Card";
 import { BadgeIcon } from "./BadgeIcon";
 import { motion, useReducedMotion } from "framer-motion";
+import type { HabboBadge } from "@/lib/habbo";
 
 type Props = {
   title?: string;
-  badges: any[];
+  badges: HabboBadge[];
   totalCount: number;
   visibleCount: number;
   pageSize: number;
@@ -33,7 +34,7 @@ export function ProfileBadgesList({
         <CardBody>
           <div className="max-h-72 overflow-auto rounded-md border border-[color:var(--border)] p-3">
             <ul className="grid grid-cols-6 sm:grid-cols-10 gap-2">
-              {badges.map((b: any, idx) => {
+              {badges.map((b: HabboBadge, idx) => {
                 const rawCode = (b?.code || b?.badgeCode || b?.badge_code || b?.badge?.code || '').toString();
                 const code = rawCode.trim();
                 // Collect potential image url hints from API

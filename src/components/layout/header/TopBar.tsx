@@ -1,19 +1,19 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion, type Transition } from 'framer-motion'
 import Link from 'next/link'
 import { navigation, type NavEntry } from './navigation'
 
 type TopBarProps = {
   reduce: boolean | null
-  fast: any
+  fast?: Transition
   menuOpen: boolean
   setMenuOpen: (open: boolean) => void
 }
 
 declare global {
-  function Play(v?: any): void
+  function Play(v?: number): void
 }
 
 const itemBaseClasses =
@@ -35,7 +35,7 @@ function renderLink(entry: NavEntry) {
 
   if (entry.href) {
     return (
-      <Link href={entry.href} className={itemBaseClasses}>
+      <Link href={entry.href} className={itemBaseClasses} prefetch={entry.prefetch ?? true}>
         {entry.label}
       </Link>
     )
@@ -48,15 +48,7 @@ function renderLink(entry: NavEntry) {
   )
 }
 
-function TopLevelItem({ entry }: { entry: NavEntry }) {
-  if (!entry.children || entry.children.length === 0) {
-    return (
-      <li className="item relative inline-flex items-center justify-center cursor-pointer min-h-[15vh] max-h-[15vh] border-l border-[#141433] hover:bg-[#1F1F3E]">
-        {renderLink(entry)}
-      </li>
-    )
-  }
-
+function TopLevelItemWithChildren({ entry }: { entry: NavEntry }) {
   const [open, setOpen] = useState(false)
   const [hoveredTrigger, setHoveredTrigger] = useState<string | null>(null)
   const closeTimer = useRef<number | null>(null)
@@ -83,28 +75,31 @@ function TopLevelItem({ entry }: { entry: NavEntry }) {
     }, 180)
   }
 
+  const isNode = (value: unknown): value is Node =>
+    typeof window !== 'undefined' && !!value && typeof (value as Node).nodeType === 'number'
+
   const handleBlur = (event: React.FocusEvent<HTMLLIElement>) => {
-    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+    const current = event.currentTarget
+    const related = event.relatedTarget as unknown
+    if (!isNode(related) || !current.contains(related as Node)) {
       scheduleClose()
     }
   }
 
   const handleMouseLeave = (event: React.MouseEvent<HTMLLIElement>) => {
     const current = event.currentTarget
-    const related = event.relatedTarget as HTMLElement | null
+    const rt = event.relatedTarget as unknown
 
-    if (related && current.contains(related)) {
-      return
-    }
+    if (isNode(rt) && current.contains(rt as Node)) return
 
-    const nextItem = related?.closest<HTMLElement>('[data-nav-item]')
+    const relatedEl = (isNode(rt) && (rt as Element).closest) ? (rt as Element) : null
+    const nextItem = relatedEl?.closest<HTMLElement>('[data-nav-item]') || null
     if (nextItem && nextItem !== current) {
       clearCloseTimer()
       setOpen(false)
       setHoveredTrigger(null)
       return
     }
-
     scheduleClose()
   }
 
@@ -155,7 +150,7 @@ function TopLevelItem({ entry }: { entry: NavEntry }) {
         className="submenu absolute left-1/2 top-full mt-2 w-[220px] -translate-x-1/2 p-[10px] rounded-[5px] bg-[#1b1b3d] z-50 flex flex-col justify-center shadow-lg shadow-black/40"
         style={{ originY: 0 }}
       >
-        {entry.children.map((child) => (
+        {entry.children!.map((child) => (
           <motion.li
             key={child.label}
             variants={submenuItemVariants}
@@ -171,7 +166,7 @@ function TopLevelItem({ entry }: { entry: NavEntry }) {
                 {child.label}
               </a>
             ) : child.href ? (
-              <Link href={child.href} className="block px-2 py-1">
+              <Link href={child.href} className="block px-2 py-1" prefetch={child.prefetch ?? true}>
                 {child.label}
               </Link>
             ) : (
@@ -184,6 +179,17 @@ function TopLevelItem({ entry }: { entry: NavEntry }) {
   )
 }
 
+function TopLevelItem({ entry }: { entry: NavEntry }) {
+  if (!entry.children || entry.children.length === 0) {
+    return (
+      <li className="item relative inline-flex items-center justify-center cursor-pointer min-h-[15vh] max-h-[15vh] border-l border-[#141433] hover:bg-[#1F1F3E]">
+        {renderLink(entry)}
+      </li>
+    )
+  }
+  return <TopLevelItemWithChildren entry={entry} />
+}
+
 export default function TopBar({ reduce, fast, menuOpen, setMenuOpen }: TopBarProps) {
   return (
     <motion.section
@@ -191,14 +197,14 @@ export default function TopBar({ reduce, fast, menuOpen, setMenuOpen }: TopBarPr
       className="navtop w-full min-h-[15vh] max-h-[15vh] bg-[#25254D] border-b border-[#141433] z-[999]"
       initial={reduce ? { opacity: 0 } : { opacity: 0, y: -10 }}
       animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0 }}
-      transition={fast as any}
+      transition={fast}
     >
       <div className="container max-w-[1200px] mx-auto px-4">
         <div className="bar-top flex w-full min-h-[15vh] max-h-[15vh] items-center justify-between">
           <div className="left flex items-center flex-1 min-w-0">
             <div
               className="avatar flex justify-center items-end min-w-[80px] h-[70px] rounded-[4px] mr-[10px] bg-[#303060] bg-cover bg-center"
-              style={{ backgroundImage: 'url(./img/bgdefault.png)' }}
+              
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img

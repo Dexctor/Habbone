@@ -24,12 +24,12 @@ function buildExcerpt(record: any) {
 }
 
 type NewsPageProps = {
-  searchParams: Promise<{ q?: string } | undefined> | { q?: string } | undefined;
+  searchParams?: Promise<{ q?: string }>
 };
 
 export default async function NewsPage({ searchParams }: NewsPageProps) {
-  const params = await Promise.resolve(searchParams);
-  const query = typeof params?.q === 'string' ? params.q.trim() : '';
+  const params = (await searchParams) ?? {};
+  const query = typeof params.q === 'string' ? params.q.trim() : '';
   const rawNews = await getNews(query).catch(() => []);
   const news: any[] = Array.isArray(rawNews)
     ? rawNews

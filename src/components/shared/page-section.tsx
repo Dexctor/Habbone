@@ -3,12 +3,13 @@ import React from "react"
 import { cn } from "@/lib/utils"
 
 export type PageSectionProps = {
-  title?: string
+  title?: React.ReactNode
   description?: string
   actions?: React.ReactNode
   children: React.ReactNode
   className?: string
   contentClassName?: string
+  titleClassName?: string
 }
 
 export function PageSection({
@@ -18,21 +19,22 @@ export function PageSection({
   children,
   className,
   contentClassName,
+  titleClassName,
 }: PageSectionProps) {
   const hasHeader = Boolean(title || description || actions)
 
   return (
     <section
       className={cn(
-        "border border-[color:var(--bg-700)]/55 bg-[color:var(--bg-900)]/40 px-6 py-6 shadow-[0_24px_65px_-55px_rgba(0,0,0,0.85)] sm:px-8",
+        "",
         className
       )}
     >
       {hasHeader ? (
-        <div className="flex flex-col gap-3 border-b border-[color:var(--bg-700)]/45 pb-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
+        <div className="flex flex-col gap-3 border-b border-[color:var(--bg-700)]/45  sm:flex-row sm:items-center sm:justify-between bg-[#1F1F3E] pr-5.5 ">
+          <div className="space-y-1 px-6 py-5 sm:px-8">
             {title ? (
-              <h2 className="text-xl font-semibold uppercase tracking-[0.16em] text-[color:var(--foreground)]">
+              <h2 className={cn("text-xl font-semibold uppercase text-[color:var(--foreground)]", titleClassName)}>
                 {title}
               </h2>
             ) : null}

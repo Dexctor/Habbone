@@ -171,38 +171,36 @@ export default function UserBarLeft({
       {!isLoading && isAuthenticated && (
         <div className="box-buttons flex gap-[10px] ml-[10px]" id="logout">
           {(session?.user as any)?.role === 'admin' && (
-            <>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Link
-                      href="/profile/admin"
-                      aria-label="Admin"
-                      className="rounded-[4px] m-[2px] h-[50px] w-[50px] grid place-items-center text-[#BEBECE] bg-[rgba(255,255,255,.1)] hover:bg-[#2596FF] hover:text-white transition-colors"
-                    >
-                      <i className="material-icons" aria-hidden>admin_panel_settings</i>
-                    </Link>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">Admin</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      onClick={onOpenStory}
-                      aria-label="Publier une storie"
-                      className="rounded-[4px] m-[2px] h-[50px] w-[50px] grid place-items-center text-[#BEBECE] bg-[rgba(255,255,255,.1)] hover:bg-[#2596FF] hover:text-white transition-colors"
-                    >
-                      <i className="material-icons" aria-hidden>add_a_photo</i>
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">Publier une storie</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Link
+                    href="/profile/admin"
+                    aria-label="Admin"
+                    className="rounded-[4px] m-[2px] h-[50px] w-[50px] grid place-items-center text-[#BEBECE] bg-[rgba(255,255,255,.1)] hover:bg-[#2596FF] hover:text-white transition-colors"
+                  >
+                    <i className="material-icons" aria-hidden>admin_panel_settings</i>
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent side="top">Admin</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={onOpenStory}
+                  aria-label="Publier une storie"
+                  className="rounded-[4px] m-[2px] h-[50px] w-[50px] grid place-items-center text-[#BEBECE] bg-[rgba(255,255,255,.1)] hover:bg-[#2596FF] hover:text-white transition-colors"
+                >
+                  <i className="material-icons" aria-hidden>add_a_photo</i>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Publier une storie</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>

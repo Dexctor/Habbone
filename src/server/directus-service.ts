@@ -15,11 +15,13 @@ import {
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import type { HabboUserCore } from '@/lib/habbo';
+import { resolveStoriesTables } from '@/lib/directus/tables';
 
 const DIRECTUS_URL = process.env.NEXT_PUBLIC_DIRECTUS_URL!;
 const SERVICE_TOKEN = process.env.DIRECTUS_SERVICE_TOKEN!;
 export const USERS_TABLE = process.env.USERS_TABLE || 'usuarios';
 export const STORIES_TABLE = process.env.STORIES_TABLE || 'usuarios_storie';
+const STORIES_FOLDER_ID = (process.env.DIRECTUS_FILES_FOLDER || '').trim() || null;
 
 if (!DIRECTUS_URL) throw new Error('NEXT_PUBLIC_DIRECTUS_URL manquant');
 if (!SERVICE_TOKEN) throw new Error('DIRECTUS_SERVICE_TOKEN manquant');
@@ -27,7 +29,7 @@ if (!SERVICE_TOKEN) throw new Error('DIRECTUS_SERVICE_TOKEN manquant');
 export type HabboVerificationStatus = 'pending' | 'ok' | 'failed' | 'locked';
 
 // ----- Client Directus avec service token (server-only) -----
-export const directusService = createDirectus(DIRECTUS_URL)
+export const directusService = createDirectus<DirectusCmsSchema>(DIRECTUS_URL)
   .with(staticToken(SERVICE_TOKEN))
   .with(rest());
 
@@ -48,65 +50,99 @@ export type DirectusRoleLite = {
   admin_access?: boolean;
   app_access?: boolean;
 };
+ 
+
+type DirectusCmsSchema = {
+  directus_roles: DirectusRoleLite;
+  directus_users: DirectusUserLite;
+} & Record<string, unknown>;
+
+type CollectionResponse<T> = {
+  data?: T[];
+  meta?: { total_count?: number };
+};
+
+type DirectusRolePayload = {
+  name: string;
+  description: string | null;
+  admin_access: boolean;
+  app_access: boolean;
+};
+ 
+const rItems = readItems as any;
+const rItem = readItem as any;
+const cItem = createItem as any;
+const uItem = updateItem as any;
+const dItem = deleteItem as any;
 
 export async function listRoles(): Promise<DirectusRoleLite[]> {
   const rows = await directusService.request(
-    readItems('directus_roles' as any, {
+    rItems('directus_roles', {
       fields: ['id', 'name', 'description', 'admin_access', 'app_access'] as any,
       sort: ['name'] as any,
     } as any)
-  );
-  return Array.isArray(rows) ? (rows as any) : [];
+  ).catch(() => []);
+  return Array.isArray(rows) ? (rows as DirectusRoleLite[]) : [];
 }
 
-export async function createRole(role: {
+export type CreateRoleInput = {
   name: string;
   description?: string | null;
   adminAccess?: boolean;
   appAccess?: boolean;
-}): Promise<DirectusRoleLite> {
-  const payload: any = {
+};
+
+export async function createRole(role: CreateRoleInput): Promise<DirectusRoleLite> {
+  const payload: DirectusRolePayload = {
     name: role.name,
     description: role.description ?? null,
-    admin_access: !!role.adminAccess,
+    admin_access: role.adminAccess ?? false,
     app_access: role.appAccess ?? true,
   };
-  return directusService.request(createItem('directus_roles' as any, payload as any)) as any;
+  const created = await directusService.request(
+    cItem('directus_roles', payload as any)
+  );
+  return created as DirectusRoleLite;
 }
 
-export async function updateRole(roleId: string, patch: Partial<{
+export type UpdateRoleInput = Partial<{
   name: string;
   description: string | null;
   adminAccess: boolean;
   appAccess: boolean;
-}>): Promise<DirectusRoleLite> {
-  const payload: any = {};
+}>;
+
+export async function updateRole(roleId: string, patch: UpdateRoleInput): Promise<DirectusRoleLite> {
+  const payload: Partial<DirectusRolePayload> = {};
   if (patch.name !== undefined) payload.name = patch.name;
-  if (patch.description !== undefined) payload.description = patch.description;
+  if (patch.description !== undefined) payload.description = patch.description ?? null;
   if (patch.adminAccess !== undefined) payload.admin_access = !!patch.adminAccess;
-  if (patch.appAccess !== undefined) payload.app_access = !!patch.appAccess;
-  return directusService.request(updateItem('directus_roles' as any, roleId as any, payload as any)) as any;
+  if (patch.appAccess !== undefined) payload.app_access = patch.appAccess ?? true;
+  const updated = await directusService.request(
+    uItem('directus_roles', roleId, payload as any)
+  );
+  return updated as DirectusRoleLite;
 }
 
 export async function getDirectusUserById(userId: string): Promise<DirectusUserLite | null> {
   const row = await directusService
     .request(
-      readItem('directus_users' as any, userId as any, {
+      rItem('directus_users', userId, {
         fields: ['id', 'email', 'first_name', 'last_name', 'status', 'role.id', 'role.name', 'role.admin_access', 'role.app_access'] as any,
       } as any)
     )
-    .catch(() => null as any);
-  return (row as any) || null;
+    .catch(() => null);
+  return (row ?? null) as DirectusUserLite | null;
 }
 export async function getRoleById(roleId: string): Promise<DirectusRoleLite | null> {
   const row = await directusService
     .request(
-      readItem('directus_roles' as any, roleId as any, {
+      rItem('directus_roles', roleId, {
         fields: ['id', 'name', 'description', 'admin_access', 'app_access'] as any,
       } as any)
     )
-    .catch(() => null as any);
-  return (row as any) || null;
+    .catch(() => null);
+  return (row ?? null) as DirectusRoleLite | null;
 }
 
 export async function searchUsers(
@@ -116,58 +152,71 @@ export async function searchUsers(
   limit = 20,
   page = 1
 ): Promise<{ items: DirectusUserLite[]; total: number }> {
-  // Items
-  const items = (await directusService.request(
-    readItems('directus_users' as any, {
-      search: q || undefined,
-      limit: limit as any,
-      page: page as any,
-      filter: {
-        ...(roleId ? ({ role: { _eq: roleId } } as any) : {}),
-        ...(status ? ({ status: { _eq: status } } as any) : {}),
-      } as any,
-      fields: ['id', 'email', 'first_name', 'last_name', 'status', 'role.id', 'role.name', 'role.admin_access', 'role.app_access'] as any,
-      sort: ['email'] as any,
-    } as any)
-  )) as any[];
+  const filter: Record<string, unknown> = {};
+  if (roleId) filter.role = { _eq: roleId };
+  if (status) filter.status = { _eq: status };
 
-  // Total via REST meta=total_count
+  const items = await directusService
+    .request(
+      rItems('directus_users', {
+        search: q || undefined,
+        limit,
+        page,
+        filter: Object.keys(filter).length ? (filter as any) : undefined,
+        fields: ['id', 'email', 'first_name', 'last_name', 'status', 'role.id', 'role.name', 'role.admin_access', 'role.app_access'] as any,
+        sort: ['email'] as any,
+      } as any)
+    )
+    .catch(() => []) as DirectusUserLite[];
+
   const url = new URL(`${DIRECTUS_URL}/items/directus_users`);
   if (q) url.searchParams.set('search', q);
-  url.searchParams.set('limit', '0');
-  url.searchParams.set('meta', 'total_count');
   if (roleId) url.searchParams.set('filter[role][_eq]', roleId);
   if (status) url.searchParams.set('filter[status][_eq]', status);
-  const res = await fetch(url.toString(), {
-    headers: { Authorization: `Bearer ${SERVICE_TOKEN}` },
-    cache: 'no-store',
-  }).catch(() => null as any);
-  let total = 0;
-  if (res && res.ok) {
-    try {
-      const json = await res.json();
-      total = Number((json as any)?.meta?.total_count ?? 0);
-    } catch {}
-  }
-  return { items: Array.isArray(items) ? (items as any) : [], total: Number.isFinite(total) ? total : 0 };
+  url.searchParams.set('limit', '0');
+  url.searchParams.set('meta', 'total_count');
+  let total = items.length;
+  try {
+    const response = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${SERVICE_TOKEN}` },
+      cache: 'no-store',
+    });
+    if (response.ok) {
+      const json = (await response.json()) as CollectionResponse<DirectusUserLite>;
+      if (typeof json?.meta?.total_count === 'number') {
+        total = json.meta.total_count;
+      }
+    }
+  } catch {}
+
+  return { items, total };
 }
 
 export async function setUserRole(userId: string, roleId: string) {
-  return directusService.request(updateItem('directus_users' as any, userId as any, { role: roleId } as any));
+  return directusService.request(
+    uItem('directus_users', userId, {
+      role: roleId,
+    } as any)
+  );
 }
 
 // Legacy block check by email (usuarios)
 export async function getLegacyUserByEmail(email?: string | null) {
   const e = (email || '').trim();
-  if (!e) return null as any;
-  const rows = await directusService.request(
-    readItems(USERS_TABLE as any, {
-      filter: { email: { _eq: e } } as any,
-      fields: ['id', 'email', 'banido', 'ativado'] as any,
-      limit: 1 as any,
-    } as any)
-  );
-  return Array.isArray(rows) && rows.length ? (rows as any)[0] : null;
+  if (!e) return null;
+  const rows = await directusService
+    .request(
+      rItems(
+        USERS_TABLE as any,
+        {
+          filter: { email: { _eq: e } } as any,
+          fields: ['id', 'email', 'banido', 'ativado'] as any,
+          limit: 1 as any,
+        } as any
+      )
+    )
+    .catch(() => []);
+  return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
 }
 export type LegacyUserLite = {
   id: number | string;
@@ -185,40 +234,56 @@ export async function searchLegacyUsuarios(
   page = 1,
   filters?: { roleName?: string | null; status?: string | null }
 ): Promise<{ items: LegacyUserLite[]; total: number }> {
+  const applyFilters = (params: URLSearchParams) => {
+    if (q) params.set('search', q);
+    if (filters?.roleName) params.set('filter[role][_eq]', String(filters.roleName));
+    if (filters?.status) params.set('filter[status][_eq]', String(filters.status));
+  };
+
+  const fetchTotalCount = async (): Promise<number | null> => {
+    const totalUrl = new URL(`${DIRECTUS_URL}/items/${encodeURIComponent(USERS_TABLE)}`);
+    applyFilters(totalUrl.searchParams);
+    totalUrl.searchParams.set('limit', '0');
+    totalUrl.searchParams.set('meta', 'total_count');
+    try {
+      const response = await fetch(totalUrl.toString(), {
+        headers: { Authorization: `Bearer ${SERVICE_TOKEN}` },
+        cache: 'no-store',
+      });
+      if (!response.ok) return null;
+      const payload = (await response.json()) as CollectionResponse<LegacyUserLite>;
+      return typeof payload?.meta?.total_count === 'number' ? payload.meta.total_count : null;
+    } catch {
+      return null;
+    }
+  };
+
   // Try via SDK first; if empty, we'll fallback to REST
   try {
-    const params: any = {
-      limit: limit as any,
-      page: page as any,
-      fields: ['id', 'email', 'nick', 'status', 'role', 'banido', 'ativado'] as any,
+    const params: Record<string, unknown> = {
+      limit,
+      page,
+      fields: ['id', 'email', 'nick', 'status', 'role', 'banido', 'ativado'],
     };
     if (q) params.search = q;
     const filter: Record<string, unknown> = {};
     if (filters?.roleName) filter.role = { _eq: filters.roleName };
     if (filters?.status) filter.status = { _eq: filters.status };
-    if (Object.keys(filter).length) params.filter = filter;
-    const items = (await directusService.request(readItems(USERS_TABLE as any, params))) as any[];
+    if (Object.keys(filter).length > 0) {
+      params.filter = filter as any;
+    }
+    const items = (await directusService
+      .request(
+        rItems(
+          USERS_TABLE as any,
+          params as any
+        )
+      )
+      .catch(() => [])) as LegacyUserLite[];
 
     if (Array.isArray(items) && items.length > 0) {
-      // Total via REST meta
-      const url = new URL(`${DIRECTUS_URL}/items/${encodeURIComponent(USERS_TABLE)}`);
-      if (q) url.searchParams.set('search', q);
-      if (filters?.roleName) url.searchParams.set('filter[role][_eq]', String(filters.roleName));
-      if (filters?.status) url.searchParams.set('filter[status][_eq]', String(filters.status));
-      url.searchParams.set('limit', '0');
-      url.searchParams.set('meta', 'total_count');
-      const res = await fetch(url.toString(), {
-        headers: { Authorization: `Bearer ${SERVICE_TOKEN}` },
-        cache: 'no-store',
-      }).catch(() => null as any);
-      let total = 0;
-      if (res && res.ok) {
-        try {
-          const json = await res.json();
-          total = Number((json as any)?.meta?.total_count ?? 0);
-        } catch {}
-      }
-      return { items, total: Number.isFinite(total) ? total : items.length };
+      const total = await fetchTotalCount();
+      return { items, total: total ?? items.length };
     }
   } catch {}
 
@@ -228,64 +293,52 @@ export async function searchLegacyUsuarios(
     url.searchParams.set('limit', String(limit));
     url.searchParams.set('page', String(page));
     url.searchParams.set('fields', 'id,email,nick,status,role,banido,ativado');
-    if (q) url.searchParams.set('search', q);
-    if (filters?.roleName) url.searchParams.set('filter[role][_eq]', String(filters.roleName));
-    if (filters?.status) url.searchParams.set('filter[status][_eq]', String(filters.status));
-    const res = await fetch(url.toString(), {
+    applyFilters(url.searchParams);
+    const response = await fetch(url.toString(), {
       headers: { Authorization: `Bearer ${SERVICE_TOKEN}`, Accept: 'application/json' },
       cache: 'no-store',
-    }).catch(() => null as any);
-    const json = (await res?.json()?.catch?.(() => null as any)) as any;
-    const items = Array.isArray((json as any)?.data) ? (json as any).data : [];
-
-    const totalUrl = new URL(`${DIRECTUS_URL}/items/${encodeURIComponent(USERS_TABLE)}`);
-    if (q) totalUrl.searchParams.set('search', q);
-    if (filters?.roleName) totalUrl.searchParams.set('filter[role][_eq]', String(filters.roleName));
-    if (filters?.status) totalUrl.searchParams.set('filter[status][_eq]', String(filters.status));
-    totalUrl.searchParams.set('limit', '0');
-    totalUrl.searchParams.set('meta', 'total_count');
-    const totalRes = await fetch(totalUrl.toString(), {
-      headers: { Authorization: `Bearer ${SERVICE_TOKEN}` },
-      cache: 'no-store',
-    }).catch(() => null as any);
-    let total = 0;
-    if (totalRes && totalRes.ok) {
-      try {
-        const totJson = await totalRes.json();
-        total = Number((totJson as any)?.meta?.total_count ?? 0);
-      } catch {}
-    }
-    return { items, total: Number.isFinite(total) ? total : items.length };
+    });
+    if (!response.ok) throw new Error(`LEGACY_USERS_FETCH_FAILED:${response.status}`);
+    const payload = (await response.json()) as CollectionResponse<LegacyUserLite>;
+    const items = Array.isArray(payload?.data) ? payload.data : [];
+    const total = await fetchTotalCount();
+    return { items, total: total ?? items.length };
   } catch {}
 
   return { items: [], total: 0 };
 }
 
 export async function setLegacyUserRole(userId: number | string, roleName: string) {
-  return directusService.request(updateItem(USERS_TABLE as any, userId as any, { role: roleName } as any));
+  const payload: Partial<LegacyUserRecord> = { role: roleName };
+  return directusService.request(
+    uItem(USERS_TABLE as any, String(userId), payload as any)
+  );
 }
 
 export async function setDirectusUserStatus(userId: string, status: 'active' | 'suspended') {
+  const payload: Partial<DirectusUserLite> = { status };
   return directusService.request(
-    updateItem('directus_users' as any, userId as any, { status } as any),
+    uItem('directus_users', userId, payload as any),
   );
 }
 
 export async function deleteDirectusUser(userId: string) {
-  return directusService.request(deleteItem('directus_users' as any, userId as any));
+  return directusService.request(dItem('directus_users', userId));
 }
 
 export async function setLegacyUserBanStatus(userId: number | string, banned: boolean) {
-  const payload: Record<string, unknown> = {
+  const payload: Partial<LegacyUserLite> & { status: string } = {
     banido: banned ? 's' : 'n',
     ativado: banned ? 'n' : 's',
     status: banned ? 'suspended' : 'active',
   };
-  return directusService.request(updateItem(USERS_TABLE as any, userId as any, payload as any));
+  return directusService.request(
+    uItem(USERS_TABLE as any, String(userId), payload as any)
+  );
 }
 
 export async function deleteLegacyUser(userId: number | string) {
-  return directusService.request(deleteItem(USERS_TABLE as any, userId as any));
+  return directusService.request(dItem(USERS_TABLE as any, String(userId)));
 }
 
 export type TeamMember = {
@@ -294,6 +347,21 @@ export type TeamMember = {
   role: string
   joinedAt: string | null
   twitter?: string | null
+};
+
+type LegacyTeamRow = {
+  id?: number | string | null;
+  nick?: string | null;
+  role?: string | null;
+  data_criacao?: string | null;
+  created_at?: string | null;
+  joined_at?: string | null;
+  banido?: string | null;
+  ativado?: string | null;
+  status?: string | null;
+  twitter?: string | null;
+  social_twitter?: string | null;
+  socials?: { twitter?: string | null } | null;
 };
 
 export async function listTeamMembersByRoles(roleNames: string[]): Promise<Record<string, TeamMember[]>> {
@@ -326,21 +394,25 @@ export async function listTeamMembersByRoles(roleNames: string[]): Promise<Recor
 
   const rows = (await directusService
     .request(
-      readItems(USERS_TABLE as any, {
-        filter: {
-          role: { _in: Array.from(normalized.values()) } as any,
-          banido: { _neq: 's' } as any,
-          ativado: { _neq: 'n' } as any,
-        } as any,
-        limit: 200 as any,
-        sort: ['role', 'nick'] as any,
-      } as any)
+      rItems(
+        USERS_TABLE as any,
+        {
+          filter: {
+            role: { _in: Array.from(normalized.values()) } as any,
+            banido: { _neq: 's' } as any,
+            ativado: { _neq: 'n' } as any,
+          } as any,
+          limit: 200 as any,
+          sort: ['role', 'nick'] as any,
+        } as any
+      )
     )
-    .catch(() => [])) as any[];
+    .catch(() => [])) as LegacyTeamRow[];
 
-  const ensureString = (value: unknown) => (typeof value === 'string' ? value : value == null ? '' : String(value));
+  const ensureString = (value: unknown): string =>
+    typeof value === 'string' ? value : value == null ? '' : String(value);
 
-  for (const raw of Array.isArray(rows) ? rows : []) {
+  for (const raw of rows) {
     const roleValueRaw = ensureString(raw?.role).trim();
     const canonicalRole =
       normalized.get(roleValueRaw.toLowerCase()) ||
@@ -373,8 +445,18 @@ export async function listTeamMembersByRoles(roleNames: string[]): Promise<Recor
             ? raw.socials.twitter
             : null;
 
+    const computedId =
+      raw?.id != null && !Number.isNaN(Number(raw.id))
+        ? Number(raw.id)
+        : Math.abs(
+            nick
+              .toLowerCase()
+              .split('')
+              .reduce((acc: number, ch: string) => acc + ch.charCodeAt(0), 0)
+          );
+
     result[canonicalRole].push({
-      id: Number(raw?.id ?? 0) || Math.abs(nick.toLowerCase().split('').reduce((acc: number, ch: string) => acc + ch.charCodeAt(0), 0)),
+      id: computedId,
       nick,
       role: canonicalRole,
       joinedAt: joined,
@@ -399,15 +481,15 @@ export async function listTeamMembersByRoles(roleNames: string[]): Promise<Recor
 
 // ================== Helpers password ==================
 /** Normalise les hashes bcrypt PHP `$2y$` -> `$2a$` pour bcryptjs */
-function normalizeBcrypt(hash?: string) {
-  if (!hash) return hash as any;
-  return hash.startsWith('$2y$') ? ('$2a$' + hash.slice(4)) : hash;
+function normalizeBcrypt(hash?: string): string | undefined {
+  if (!hash) return undefined;
+  return hash.startsWith('$2y$') ? `$2a$${hash.slice(4)}` : hash;
 }
 
 export function isBcrypt(hash?: string) {
   if (!hash) return false;
   const h = normalizeBcrypt(hash);
-  return /^\$2[ab]\$/.test(h);
+  return /^\$2[ab]\$/.test(h || '');
 }
 
 export function md5(str: string) {
@@ -422,30 +504,54 @@ export function hashPassword(plain: string) {
 export function passwordsMatch(plain: string, stored: string) {
   if (!stored) return false;
   if (isBcrypt(stored)) {
-    return bcrypt.compareSync(plain, normalizeBcrypt(stored));
+    const fixed = normalizeBcrypt(stored) || stored;
+    return bcrypt.compareSync(plain, fixed);
   }
   // fallback MD5 legacy
   return md5(plain) === stored;
 }
 
 // ================== Helpers bool 's'/'n' ==================
-export function asTrue(v: any) {
+export function asTrue(v: unknown): boolean {
+  const normalized = typeof v === 'string' ? v.trim().toLowerCase() : v;
   return (
-    v === true ||
-    v === 1 ||
-    v === '1' ||
-    v === 's' ||
-    v === 'y' ||
-    v === 'sim' ||
-    v === 'yes' ||
-    v === 'ativo' // au cas o?
+    normalized === true ||
+    normalized === 1 ||
+    normalized === '1' ||
+    normalized === 's' ||
+    normalized === 'y' ||
+    normalized === 'sim' ||
+    normalized === 'yes' ||
+    normalized === 'ativo'
   );
 }
-export function asFalse(v: any) {
+export function asFalse(v: unknown): boolean {
   return !asTrue(v);
 }
 
 // ================== Acc?s utilisateurs ==================
+type LegacyUserRecord = {
+  id?: number | string | null;
+  nick?: string | null;
+  senha?: string | null;
+  email?: string | null;
+  avatar?: string | null;
+  missao?: string | null;
+  ativado?: string | null;
+  banido?: string | null;
+  status?: string | null;
+  role?: string | null;
+  data_criacao?: string | null;
+  habbo_hotel?: string | null;
+  habbo_unique_id?: string | null;
+  habbo_verification_status?: HabboVerificationStatus | null;
+  habbo_verification_code?: string | null;
+  habbo_verification_expires_at?: string | null;
+  habbo_verified_at?: string | null;
+  habbo_name?: string | null;
+  habbo_core_snapshot?: unknown;
+  habbo_snapshot_at?: string | null;
+};
 const USER_FIELDS = [
   'id',
   'nick',
@@ -474,14 +580,16 @@ export function normalizeHotelCode(hotel?: string | null): 'fr' | 'com' | 'com.b
 }
 
 export async function listUsersByNick(nick: string) {
-  const rows = await directusService.request(
-    readItems(USERS_TABLE, {
-      filter: { nick: { _eq: nick } },
-      limit: 50,
-      fields: USER_FIELDS,
-    })
-  );
-  return Array.isArray(rows) ? (rows as any[]) : [];
+  const raw = await directusService
+    .request(
+      rItems(USERS_TABLE as any, {
+        filter: { nick: { _eq: nick } } as any,
+        limit: 50 as any,
+        fields: USER_FIELDS,
+      } as any)
+    )
+    .catch(() => []);
+  return Array.isArray(raw) ? raw : [];
 }
 
 export async function getUserByNick(nick: string, hotel?: string | null) {
@@ -509,14 +617,17 @@ export async function getUserByNick(nick: string, hotel?: string | null) {
             ],
           };
 
-  const rows = await directusService.request(
-    readItems(USERS_TABLE, {
-      filter,
-      limit: 1,
-      fields: USER_FIELDS,
-    })
-  );
-  return Array.isArray(rows) && rows.length ? (rows as any[])[0] : null;
+  const raw = await directusService
+    .request(
+      rItems(USERS_TABLE as any, {
+        filter: filter as any,
+        limit: 1 as any,
+        fields: USER_FIELDS,
+      } as any)
+    )
+    .catch(() => []);
+  const rows = Array.isArray(raw) ? raw : [];
+  return rows.length ? rows[0] : null;
 }
 
 export async function createUser(data: {
@@ -532,7 +643,7 @@ export async function createUser(data: {
   verifiedAt?: string | null;
   ativado?: 's' | 'n';
 }) {
-  const payload = {
+    const payload: LegacyUserRecord = {
     nick: data.nick,
     senha: hashPassword(data.senha),
     email: data.email ?? null,
@@ -548,12 +659,16 @@ export async function createUser(data: {
     habbo_verified_at: data.verifiedAt ?? null,
     // status omis: laisser Directus d?finir la valeur par d?faut si n?cessaire
   };
-  return directusService.request(createItem(USERS_TABLE, payload));
+  return directusService.request(
+    cItem(USERS_TABLE as any, payload as any)
+  );
 }
 
 export async function upgradePasswordToBcrypt(userId: number, plain: string) {
   return directusService.request(
-    updateItem(USERS_TABLE, userId, { senha: hashPassword(plain) })
+    uItem(USERS_TABLE as any, userId as any, {
+      senha: hashPassword(plain),
+    })
   );
 }
 
@@ -569,7 +684,9 @@ export async function updateUserVerification(
     ativado: 's' | 'n';
   }>
 ) {
-  return directusService.request(updateItem(USERS_TABLE, userId, patch));
+  return directusService.request(
+    uItem(USERS_TABLE as any, userId as any, patch as any)
+  );
 }
 
 export async function markUserAsVerified(userId: number) {
@@ -598,25 +715,25 @@ export async function tryUpdateHabboSnapshotForUser(
   core: HabboUserCore
 ): Promise<boolean> {
   try {
-    const payload: any = {
+    const payload: Partial<LegacyUserRecord> = {
       habbo_unique_id: core.uniqueId,
       habbo_name: core.name,
       habbo_core_snapshot: core,
       habbo_snapshot_at: new Date().toISOString(),
     };
-    await directusService.request(updateItem(USERS_TABLE, userId, payload));
+    await directusService.request(
+      uItem(USERS_TABLE as any, userId as any, payload as any)
+    );
     return true;
   } catch {
     // Si les colonnes n'existent pas, on ignore pour ne pas bloquer le flux d'inscription
     return false;
   }
 }
-
-// ================== Admin helpers (server-only) ==================
 // Users listing (read-only)
 export async function adminListUsers(limit = 500) {
   return directusService.request(
-    readItems(USERS_TABLE, {
+    rItems(USERS_TABLE as any, {
       limit,
       sort: ['-data_criacao'],
       fields: [
@@ -628,14 +745,74 @@ export async function adminListUsers(limit = 500) {
         'status',
         'data_criacao',
       ],
-    })
+    } as any)
   );
 }
 
+export type NewsRecord = {
+  id: number;
+  titulo: string;
+  descricao?: string | null;
+  imagem?: string | null;
+  noticia?: string | null;
+  autor?: string | null;
+  data?: string | null;
+  status?: string | null;
+};
+
+export type NewsCommentRecord = {
+  id: number;
+  id_noticia: number;
+  comentario: string;
+  autor?: string | null;
+  data?: string | null;
+  status?: string | null;
+};
+
+export type ForumTopicRecord = {
+  id: number;
+  titulo: string;
+  conteudo?: string | null;
+  imagem?: string | null;
+  autor?: string | null;
+  data?: string | null;
+  views?: number | null;
+  fixo?: boolean | number | string;
+  fechado?: boolean | number | string;
+  status?: string | null;
+  cat_id?: number | null;
+};
+
+export type ForumPostRecord = {
+  id: number;
+  id_topico: number;
+  conteudo: string;
+  autor?: string | null;
+  data?: string | null;
+  status?: string | null;
+};
+
+export type ForumCommentRecord = {
+  id: number;
+  id_forum: number;
+  comentario: string;
+  autor?: string | null;
+  data?: string | null;
+  status?: string | null;
+};
+
+export type ForumCategoryRecord = {
+  id: number;
+  nome: string;
+  descricao?: string | null;
+  status?: string | null;
+  imagem?: string | null;
+};
+
 // News (articles)
-export async function adminListNews(limit = 500) {
+export async function adminListNews(limit = 500): Promise<NewsRecord[]> {
   return directusService.request(
-    readItems('noticias', {
+    rItems('noticias', {
       limit,
       sort: ['-data'],
       fields: [
@@ -648,8 +825,8 @@ export async function adminListNews(limit = 500) {
         'data',
         'status',
       ],
-    })
-  );
+    } as any)
+  ) as Promise<NewsRecord[]>;
 }
 
 export async function adminCreateNews(data: {
@@ -660,7 +837,7 @@ export async function adminCreateNews(data: {
   autor?: string | null;
   data?: string | null;
   status?: string | null;
-}) {
+}): Promise<NewsRecord> {
   const payload: any = {
     titulo: data.titulo,
     descricao: data.descricao ?? null,
@@ -670,7 +847,7 @@ export async function adminCreateNews(data: {
     data: data.data ?? new Date().toISOString(),
     status: data.status ?? null,
   };
-  return directusService.request(createItem('noticias', payload));
+  return directusService.request(cItem('noticias', payload)) as Promise<NewsRecord>;
 }
 
 export async function adminUpdateNews(id: number, patch: Partial<{
@@ -681,18 +858,53 @@ export async function adminUpdateNews(id: number, patch: Partial<{
   autor: string | null;
   data: string | null;
   status: string | null;
-}>) {
-  return directusService.request(updateItem('noticias', id, patch as any));
+}>): Promise<NewsRecord> {
+  return directusService.request(uItem('noticias', id, patch as any)) as Promise<NewsRecord>;
 }
 
 export async function adminDeleteNews(id: number) {
-  return directusService.request(deleteItem('noticias', id));
+  return directusService.request(dItem('noticias', id));
+}
+
+export async function listNewsByAuthorService(author: string, limit = 30): Promise<NewsRecord[]> {
+  if (!author) return [];
+  const rows = await directusService.request(
+    rItems('noticias', {
+      filter: { autor: { _eq: author } } as any,
+      fields: ['id', 'titulo', 'descricao', 'imagem', 'autor', 'data', 'status'] as any,
+      sort: ['-data'] as any,
+      limit: limit as any,
+    } as any)
+  ).catch(() => [] as NewsRecord[]);
+  return Array.isArray(rows) ? (rows as NewsRecord[]) : [];
+}
+
+export async function adminListNewsComments(limit = 500, newsId?: number): Promise<NewsCommentRecord[]> {
+  return directusService.request(
+    rItems('noticias_coment', {
+      limit,
+      sort: ['-data'],
+      filter: newsId ? { id_noticia: { _eq: newsId } } : undefined,
+      fields: ['id', 'id_noticia', 'comentario', 'autor', 'data', 'status'],
+    } as any)
+  ) as Promise<NewsCommentRecord[]>;
+}
+
+export async function adminUpdateNewsComment(
+  id: number,
+  patch: Partial<{ comentario: string; autor: string | null; data: string | null; status: string | null }>
+): Promise<NewsCommentRecord> {
+  return directusService.request(uItem('noticias_coment', id, patch as any)) as Promise<NewsCommentRecord>;
+}
+
+export async function adminDeleteNewsComment(id: number) {
+  return directusService.request(dItem('noticias_coment', id));
 }
 
 // Forum (topics, posts)
-export async function adminListForumTopics(limit = 200) {
+export async function adminListForumTopics(limit = 200): Promise<ForumTopicRecord[]> {
   return directusService.request(
-    readItems('forum_topicos', {
+    rItems('forum_topicos', {
       limit,
       filter: { status: { _neq: 'inativo' } } as any,
       sort: ['-data'],
@@ -706,50 +918,28 @@ export async function adminListForumTopics(limit = 200) {
         'status',
         'cat_id',
       ],
-    })
-  );
+    } as any)
+  ) as Promise<ForumTopicRecord[]>;
 }
 
-export async function listForumTopicsWithCategories(limit = 50) {
-  try {
-    return await directusService.request(
-      readItems('forum_topicos', {
-        limit,
-        sort: ['-data'],
-        fields: [
-          'id',
-          'titulo',
-          'conteudo',
-          'imagem',
-          'autor',
-          'data',
-          'views',
-          'fixo',
-          'fechado',
-          'status',
-          'cat_id',
-        ],
-      })
-    )
-  } catch (error) {
-    console.error('[directus] listForumTopicsWithCategories failed', error)
-    return []
-  }
+export async function listForumCategoriesService(): Promise<ForumCategoryRecord[]> {
+  return directusService.request(
+    rItems('forum_cat', {
+      limit: 100 as any,
+      sort: ['nome'] as any,
+      fields: ['id', 'nome', 'descricao', 'status', 'imagem'] as any,
+    } as any)
+  ) as Promise<ForumCategoryRecord[]>;
 }
 
-export async function listForumCategoriesService() {
-  try {
-    return await directusService.request(
-      readItems('forum_cat' as any, {
-        limit: 100 as any,
-        sort: ['nome'] as any,
-        fields: ['id', 'nome', 'status', 'imagem'] as any,
-      } as any)
-    )
-  } catch (error) {
-    console.error('[directus] listForumCategoriesService failed', error)
-    return []
-  }
+export async function listForumTopicsWithCategories(limit = 50): Promise<ForumTopicRecord[]> {
+  return directusService.request(
+    rItems('forum_topicos', {
+      limit,
+      sort: ['-data'],
+      fields: ['id', 'titulo', 'conteudo', 'imagem', 'autor', 'data', 'views', 'fixo', 'fechado', 'status', 'cat_id'] as any,
+    } as any)
+  ) as Promise<ForumTopicRecord[]>;
 }
 
 export async function adminCreateForumPost(data: {
@@ -758,7 +948,7 @@ export async function adminCreateForumPost(data: {
   autor?: string | null;
   data?: string | null;
   status?: string | null;
-}) {
+}): Promise<ForumPostRecord> {
   const payload: any = {
     id_topico: data.id_topico,
     conteudo: data.conteudo,
@@ -766,7 +956,7 @@ export async function adminCreateForumPost(data: {
     data: data.data ?? new Date().toISOString(),
     status: data.status ?? null,
   };
-  return directusService.request(createItem('forum_posts', payload));
+  return directusService.request(cItem('forum_posts', payload)) as Promise<ForumPostRecord>;
 }
 
 export async function adminUpdateForumPost(id: number, patch: Partial<{
@@ -774,35 +964,12 @@ export async function adminUpdateForumPost(id: number, patch: Partial<{
   autor: string | null;
   data: string | null;
   status: string | null;
-}>) {
-  return directusService.request(updateItem('forum_posts', id, patch as any));
+}>): Promise<ForumPostRecord> {
+  return directusService.request(uItem('forum_posts', id, patch as any)) as Promise<ForumPostRecord>;
 }
 
 export async function adminDeleteForumPost(id: number) {
-  return directusService.request(deleteItem('forum_posts', id));
-}
-
-// ---- Admin: News comments (noticias_coment)
-export async function adminListNewsComments(limit = 500, newsId?: number) {
-  return directusService.request(
-    readItems('noticias_coment', {
-      limit,
-      sort: ['-data'],
-      filter: newsId ? { id_noticia: { _eq: newsId } } : undefined,
-      fields: ['id', 'id_noticia', 'comentario', 'autor', 'data', 'status'],
-    })
-  );
-}
-
-export async function adminUpdateNewsComment(
-  id: number,
-  patch: Partial<{ comentario: string; autor: string | null; data: string | null; status: string | null }>
-) {
-  return directusService.request(updateItem('noticias_coment', id, patch as any));
-}
-
-export async function adminDeleteNewsComment(id: number) {
-  return directusService.request(deleteItem('noticias_coment', id));
+  return directusService.request(dItem('forum_posts', id));
 }
 
 export async function createNewsComment(input: {
@@ -810,7 +977,7 @@ export async function createNewsComment(input: {
   author: string;
   content: string;
   status?: string | null;
-}) {
+}): Promise<NewsCommentRecord> {
   const payload: Record<string, unknown> = {
     id_noticia: input.newsId,
     comentario: input.content,
@@ -818,34 +985,157 @@ export async function createNewsComment(input: {
     data: new Date().toISOString(),
     status: input.status ?? 'public',
   };
-  return directusService.request(createItem('noticias_coment', payload as any));
+  return directusService.request(cItem('noticias_coment', payload as any)) as Promise<NewsCommentRecord>;
 }
 
-// ---- Admin: Forum comments (forum_coment)
-export async function adminListForumComments(limit = 500, topicId?: number) {
+export async function adminListForumComments(limit = 500, topicId?: number): Promise<ForumCommentRecord[]> {
   return directusService.request(
-    readItems('forum_coment', {
+    rItems('forum_coment', {
       limit,
       sort: ['-data'],
       filter: topicId ? { id_forum: { _eq: topicId } } : undefined,
       fields: ['id', 'id_forum', 'comentario', 'autor', 'data', 'status'],
-    })
-  );
+    } as any)
+  ) as Promise<ForumCommentRecord[]>;
 }
 
 export async function adminUpdateForumComment(
   id: number,
   patch: Partial<{ comentario: string; autor: string | null; data: string | null; status: string | null }>
-) {
-  return directusService.request(updateItem('forum_coment', id, patch as any));
+): Promise<ForumCommentRecord> {
+  return directusService.request(uItem('forum_coment', id, patch as any)) as Promise<ForumCommentRecord>;
 }
 
 export async function adminDeleteForumComment(id: number) {
-  return directusService.request(deleteItem('forum_coment', id));
+  return directusService.request(dItem('forum_coment', id));
 }
 
+// ---------- Forum (public helpers) ----------
+export async function createForumComment(input: {
+  topicId: number
+  author: string
+  content: string
+  status?: string | null
+}): Promise<ForumCommentRecord> {
+  const payload: any = {
+    id_forum: input.topicId,
+    comentario: input.content,
+    autor: input.author || 'Anonyme',
+    data: new Date().toISOString(),
+    status: input.status ?? 'public',
+  }
+  return directusService.request(cItem('forum_coment', payload)) as Promise<ForumCommentRecord>
+}
 
-// Generic counter using Directus REST (returns meta.total_count)
+export async function toggleForumCommentLike(commentId: number, author: string) {
+  // 1) Try to find an existing like tied to this author
+  const byAuthor = await directusService
+    .request(
+      rItems('forum_coment_curtidas' as any, {
+        filter: {
+          id_comentario: { _eq: commentId } as any,
+          ...(author ? ({ autor: { _eq: author } } as any) : {}),
+        } as any,
+        limit: 1 as any,
+        fields: ['id'] as any,
+      } as any)
+    )
+    .catch(() => []) as any[]
+
+  if (Array.isArray(byAuthor) && byAuthor.length > 0) {
+    const id = (byAuthor[0] as any)?.id
+    if (id != null) {
+      await directusService.request(dItem('forum_coment_curtidas' as any, id as any))
+      return { liked: false }
+    }
+  }
+
+  // 2) Not found by author, try to insert (with graceful fallback)
+  const payload: any = { id_comentario: commentId }
+  if (author) payload.autor = author
+  try {
+    await directusService.request(cItem('forum_coment_curtidas' as any, payload))
+    return { liked: true }
+  } catch {
+    // 3) If insert fails (unique constraint or author column missing),
+    // attempt to toggle by comment only (delete any existing row for this comment)
+    const anyRow = await directusService
+      .request(
+        rItems('forum_coment_curtidas' as any, {
+          filter: { id_comentario: { _eq: commentId } } as any,
+          limit: 1 as any,
+          fields: ['id'] as any,
+        } as any)
+      )
+      .catch(() => []) as any[]
+    const existingId = Array.isArray(anyRow) && anyRow.length ? (anyRow[0] as any)?.id : null
+    if (existingId != null) {
+      await directusService.request(dItem('forum_coment_curtidas' as any, existingId as any))
+      return { liked: false }
+    }
+    // Last resort: try insert without author
+    await directusService.request(cItem('forum_coment_curtidas' as any, { id_comentario: commentId } as any))
+    return { liked: true }
+  }
+}
+
+export async function reportForumComment(commentId: number, author: string) {
+  const payload: any = {
+    tipo: 'report',
+    alvo_tipo: 'comment',
+    alvo_id: commentId,
+    autor: author || null,
+    data: new Date().toISOString(),
+  }
+  try {
+    return await directusService.request(cItem('forum_interacoes' as any, payload))
+  } catch {
+    return null
+  }
+}
+
+export async function setTopicVote(topicId: number, author: string, vote: 1 | -1) {
+  // Upsert by (topicId, author)
+  const rows = await directusService
+    .request(
+      rItems('forum_topicos_votos' as any, {
+        filter: { id_topico: { _eq: topicId }, ...(author ? ({ autor: { _eq: author } } as any) : {}) } as any,
+        limit: 1 as any,
+        fields: ['id'] as any,
+      } as any)
+    )
+    .catch(() => []) as any[]
+  if (Array.isArray(rows) && rows.length > 0) {
+    const id = (rows[0] as any)?.id
+    if (id != null) {
+      await directusService.request(uItem('forum_topicos_votos' as any, id as any, { voto: vote } as any))
+      return { updated: true }
+    }
+  }
+  const payload: any = { id_topico: topicId, voto: vote }
+  if (author) payload.autor = author
+  await directusService.request(cItem('forum_topicos_votos' as any, payload))
+  return { created: true }
+}
+
+export async function getTopicVoteSummary(topicId: number): Promise<{ up: number; down: number }> {
+  const count = async (v: 1 | -1) => {
+    const url = new URL(`${DIRECTUS_URL}/items/${encodeURIComponent('forum_topicos_votos')}`)
+    url.searchParams.set('limit', '0')
+    url.searchParams.set('meta', 'total_count')
+    url.searchParams.set('filter[id_topico][_eq]', String(topicId))
+    url.searchParams.set('filter[voto][_eq]', String(v))
+    try {
+      const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${SERVICE_TOKEN}` }, cache: 'no-store' })
+      if (!res.ok) return 0
+      const json = await res.json()
+      const n = Number((json as any)?.meta?.total_count ?? 0)
+      return Number.isFinite(n) ? n : 0
+    } catch { return 0 }
+  }
+  const [up, down] = await Promise.all([count(1), count(-1)])
+  return { up, down }
+}
 export async function adminCount(table: string): Promise<number> {
   const url = `${DIRECTUS_URL}/items/${encodeURIComponent(table)}?limit=0&meta=total_count`;
   const res = await fetch(url, {
@@ -876,17 +1166,17 @@ export async function adminUpdateForumTopic(id: number, patch: Partial<{
   fixo: boolean | number | string;
   fechado: boolean | number | string;
   status: string | null;
-}>) {
-  return directusService.request(updateItem('forum_topicos', id, patch as any));
+}>): Promise<ForumTopicRecord> {
+  return directusService.request(uItem('forum_topicos', id, patch as any)) as Promise<ForumTopicRecord>;
 }
 
 export async function adminDeleteForumTopic(id: number) {
-  return directusService.request(deleteItem('forum_topicos', id));
+  return directusService.request(dItem('forum_topicos', id));
 }
 
 export async function getUserMoedas(userId: number): Promise<number> {
   const row = await directusService
-    .request(readItem(USERS_TABLE as any, userId as any, { fields: ['moedas'] as any } as any))
+    .request(rItem(USERS_TABLE as any, userId as any, { fields: ['moedas'] as any } as any))
     .catch(() => null as any);
   const value = (row as any)?.moedas;
   const n = typeof value === 'number' ? value : Number(value);
@@ -899,6 +1189,7 @@ export async function uploadFileToDirectus(file: File, filename: string, mimeTyp
   const formData = new FormData();
   formData.set('file', file, safeName);
   formData.set('title', safeName);
+  if (STORIES_FOLDER_ID) formData.set('folder', STORIES_FOLDER_ID);
 
   const response = await fetch(`${DIRECTUS_URL}/files`, {
     method: 'POST',
@@ -943,11 +1234,12 @@ export async function createStoryRow(input: StoryRowInput) {
     status: input.status ?? 'public',
     data: nowIso,
     dta: unixSeconds,
+    published_at: input.status === 'draft' ? null : nowIso,
   };
   if (input.title) payload.titulo = input.title;
 
   try {
-    return await directusService.request(createItem(table as any, payload as any));
+    return await directusService.request(cItem(table as any, payload as any));
   } catch {
     const response = await fetch(`${DIRECTUS_URL}/items/${encodeURIComponent(table)}`, {
       method: 'POST',
@@ -975,7 +1267,8 @@ export async function countStoriesThisMonthByAuthor(author: string): Promise<num
 
   const url = new URL(`${DIRECTUS_URL}/items/${encodeURIComponent(table)}`);
   url.searchParams.set('filter[autor][_eq]', author);
-  url.searchParams.set('filter[date_created][_gte]', startIso);
+  url.searchParams.set('filter[_or][0][published_at][_gte]', startIso);
+  url.searchParams.set('filter[_or][1][date_created][_gte]', startIso);
   url.searchParams.set('limit', '0');
   url.searchParams.set('meta', 'total_count');
 
@@ -992,7 +1285,7 @@ export async function countStoriesThisMonthByAuthor(author: string): Promise<num
 
   const rows = (await directusService
     .request(
-      readItems(table as any, {
+      rItems(table as any, {
         filter: { autor: { _eq: author } } as any,
         limit: 100 as any,
         sort: ['-date_created'] as any,
@@ -1049,30 +1342,18 @@ function normalizeTimestamp(value: unknown): number {
 }
 // ================== Stories (server-only, service token) ==================
 export async function listStoriesService(limit = 30): Promise<unknown[]> {
-  const candidates = [
-    STORIES_TABLE,
-    'usuarios_storie',
-    'usuarios_stories',
-    'Usuarios_Storie',
-    'Usuarios_storie',
-    'Usuarios Storie',
-  ].filter((v, i, a) => v && a.indexOf(v) === i)
-
-  for (const col of candidates) {
+  for (const col of resolveStoriesTables()) {
     try {
       const rows = await directusService.request(
-        readItems(col as any, {
+        rItems(col as any, {
           // Do not specify fields to avoid 400 on unknown field names across installs
           sort: ['-id'] as any,
           limit,
-        })
+        } as any)
       )
       if (Array.isArray(rows) && rows.length) return rows as any[]
     } catch {}
   }
   return [] as any[]
 }
-
-
-
 

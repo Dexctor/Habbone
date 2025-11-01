@@ -49,7 +49,7 @@ export const RegisterBodySchema = z.object({
     .optional()
     .transform((v) => (v ? v.toLowerCase().trim() : 'fr'))
     .refine((v) => HabboHotelEnum.options.includes(v as any), 'hotel invalide')
-    .transform((v) => v as typeof HabboHotelEnum._type),
+    .transform((v) => v as z.infer<typeof HabboHotelEnum>),
 })
 
 const HabboProfileLite = z.object({

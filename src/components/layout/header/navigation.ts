@@ -3,6 +3,7 @@ export type NavEntry = {
   href?: string
   external?: boolean
   children?: NavEntry[]
+  prefetch?: boolean
 }
 
 export const navigation: NavEntry[] = [
@@ -28,8 +29,8 @@ export const navigation: NavEntry[] = [
   {
     label: 'Extras',
     children: [
-      { label: "Generateur d'avatar", href: '/imager' },
-      { label: 'Changements de pseudo Habbo', href: '/pseudohabbo' },
+      { label: "Generateur d'avatar", href: '/imager', prefetch: false },
+      { label: 'Changements de pseudo Habbo', href: '/pseudohabbo', prefetch: false },
     ],
   },
   { label: 'Forum', href: '/forum' },

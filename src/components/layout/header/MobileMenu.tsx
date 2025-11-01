@@ -42,7 +42,7 @@ function renderMobileLink(entry: NavEntry, onNavigate: () => void, active: boole
 
   if (entry.href) {
     return (
-      <Link href={entry.href} className={base} onClick={onNavigate}>
+      <Link href={entry.href} className={base} onClick={onNavigate} prefetch={entry.prefetch ?? true}>
         {entry.label}
       </Link>
     )

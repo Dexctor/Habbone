@@ -1,4 +1,4 @@
-﻿// src/lib/directus.ts
+// src/lib/directus.ts
 import { createDirectus, rest, readItems, readItem } from '@directus/sdk';
 
 // ---------- ENV ----------
@@ -8,29 +8,94 @@ if (!DIRECTUS_URL) throw new Error('NEXT_PUBLIC_DIRECTUS_URL manquant');
 // ---------- CLIENT PUBLIC (lecture anonyme / rÃ¨gles rÃ´le Public) ----------
 export const directus = createDirectus(DIRECTUS_URL).with(rest());
 
+// ---------- TYPES ----------
+export type Dateish = string | number | null | undefined;
+
+export type NewsRecord = {
+  id: number;
+  titulo?: string | null;
+  descricao?: string | null;
+  imagem?: string | null;
+  noticia?: string | null;
+  status?: string | null;
+  autor?: string | null;
+  data?: Dateish;
+};
+
+export type NewsCommentRecord = {
+  id: number;
+  id_noticia: number;
+  comentario?: string | null;
+  autor?: string | null;
+  data?: Dateish;
+  status?: string | null;
+};
+
+export type ForumTopicRecord = {
+  id: number;
+  titulo?: string | null;
+  conteudo?: string | null;
+  imagem?: string | null;
+  autor?: string | null;
+  data?: Dateish;
+  views?: number | string | null;
+  fixo?: boolean | number | string | null;
+  fechado?: boolean | number | string | null;
+  status?: string | null;
+};
+
+export type ForumPostRecord = {
+  id: number;
+  id_topico: number;
+  conteudo?: string | null;
+  autor?: string | null;
+  data?: Dateish;
+  status?: string | null;
+};
+
+export type ForumCategoryRecord = {
+  id: number | string;
+  nome?: string | null;
+  descricao?: string | null;
+  slug?: string | null;
+  ordem?: number | null;
+};
+
+export type ForumCommentRecord = {
+  id: number;
+  id_forum: number;
+  comentario?: string | null;
+  autor?: string | null;
+  data?: Dateish;
+  status?: string | null;
+};
+
+export type StoryRow = {
+  id: number;
+  autor?: string | null;
+  image?: string | null;
+  dta?: Dateish;
+  data?: Dateish;
+  status?: string | null;
+};
+
+type LikeRow = { id_comentario: number | string };
+
 // ===================== NEWS =====================
-export function getNews(query?: string) {
-  const options: any = {
-    fields: [
-      'id',
-      'titulo',
-      'descricao',
-      'imagem',
-      'noticia',
-      'status',
-      'autor',
-      'data',
-    ],
-    sort: ['-data'],
-    limit: 24,
-  };
+export function getNews(query?: string): Promise<NewsRecord[]> {
   const q = typeof query === 'string' ? query.trim() : '';
-  if (q) options.search = q;
-  return directus.request(readItems('noticias', options));
+  return directus.request(
+    readItems('noticias', {
+      fields: ['id', 'titulo', 'descricao', 'imagem', 'noticia', 'status', 'autor', 'data'],
+      sort: ['-data'],
+      limit: 24,
+      ...(q ? { search: q } : {}),
+    })
+  ) as Promise<NewsRecord[]>;
 }
 
 // Admin/list views: larger limits
-export function listAllNews(limit = 1000) {
+export function listAllNews(limit = 1000): Promise<NewsRecord[]> {
   return directus.request(
     readItems('noticias', {
       fields: [
@@ -47,11 +112,11 @@ export function listAllNews(limit = 1000) {
       sort: ['-data'],
       limit,
     })
-  );
+  ) as Promise<NewsRecord[]>;
 }
 
 // News by author (nick string)
-export function listNewsByAuthor(author: string, limit = 50) {
+export function listNewsByAuthor(author: string, limit = 50): Promise<NewsRecord[]> {
   return directus.request(
     readItems('noticias', {
       filter: { autor: { _eq: author } },
@@ -59,10 +124,10 @@ export function listNewsByAuthor(author: string, limit = 50) {
       sort: ['-data'],
       limit,
     })
-  );
+  ) as Promise<NewsRecord[]>;
 }
 
-export function getOneNews(id: number) {
+export function getOneNews(id: number): Promise<NewsRecord> {
   return directus.request(
     readItem('noticias', id, {
       fields: [
@@ -76,21 +141,21 @@ export function getOneNews(id: number) {
         'status',
       ],
     })
-  );
+  ) as Promise<NewsRecord>;
 }
 
 // News for cards (minimal fields only)
-export function listNewsForCards(limit = 60) {
+export function listNewsForCards(limit = 60): Promise<NewsRecord[]> {
   return directus.request(
     readItems('noticias', {
       fields: ['id', 'titulo', 'descricao', 'imagem', 'data'],
       sort: ['-data'],
       limit,
     })
-  );
+  ) as Promise<NewsRecord[]>;
 }
 
-export function getNewsComments(newsId: number) {
+export function getNewsComments(newsId: number): Promise<NewsCommentRecord[]> {
   return directus.request(
     readItems('noticias_coment', {
       filter: { id_noticia: { _eq: newsId } },
@@ -98,34 +163,29 @@ export function getNewsComments(newsId: number) {
       sort: ['data'],
       limit: 200,
     })
-  );
+  ) as Promise<NewsCommentRecord[]>;
 }
 
 // ===================== STORIES =====================
-export async function listStories(limit = 30) {
-  const configured = (process.env.STORIES_TABLE || '').trim();
-  const candidates = [
-    configured || 'usuarios_storie',
-    'usuarios_stories',
-    'Usuarios_storie',
-    'Usuarios_stories',
-  ].filter((v, i, a) => v && a.indexOf(v) === i);
-  for (const col of candidates) {
+import { resolveStoriesTables } from '@/lib/directus/tables';
+
+export async function listStories(limit = 30): Promise<StoryRow[]> {
+  for (const col of resolveStoriesTables()) {
     try {
       const rows = await directus.request(
-        readItems(col as any, {
-          fields: ['id', 'autor', 'image', 'dta', 'data', 'status'] as any,
-          sort: ['-dta', '-data'] as any,
+        readItems(col as string, {
+          fields: ['id', 'autor', 'image', 'dta', 'data', 'status'],
+          sort: ['-dta', '-data'],
           limit,
         })
-      );
-      if (Array.isArray(rows) && rows.length) return rows as any[];
+      ) as StoryRow[];
+      if (Array.isArray(rows) && rows.length) return rows;
     } catch {}
   }
-  return [] as any[];
+  return [] as StoryRow[];
 }
 
-export async function getLikesMapForNewsComments(commentIds: number[]) {
+export async function getLikesMapForNewsComments(commentIds: number[]): Promise<Record<number, number>> {
   if (!commentIds?.length) return {};
   const likes = await directus.request(
     readItems('noticias_coment_curtidas', {
@@ -133,9 +193,9 @@ export async function getLikesMapForNewsComments(commentIds: number[]) {
       fields: ['id_comentario'],
       limit: 5000,
     })
-  );
-  return (likes as any[]).reduce((acc: Record<number, number>, row: any) => {
-    const cid = Number(row.id_comentario);
+  ) as LikeRow[];
+  return (likes as LikeRow[]).reduce((acc: Record<number, number>, row: LikeRow) => {
+    const cid = Number((row as LikeRow).id_comentario);
     acc[cid] = (acc[cid] ?? 0) + 1;
     return acc;
   }, {});
@@ -143,7 +203,7 @@ export async function getLikesMapForNewsComments(commentIds: number[]) {
 
 // ===================== FORUM =====================
 // -- Topics (liste)
-export function getTopics() {
+export function getTopics(): Promise<ForumTopicRecord[]> {
   return directus.request(
     readItems('forum_topicos', {
       fields: [
@@ -161,10 +221,10 @@ export function getTopics() {
       sort: ['-data'],
       limit: 50,
     })
-  );
+  ) as Promise<ForumTopicRecord[]>;
 }
 
-export function listAllTopics(limit = 1000) {
+export function listAllTopics(limit = 1000): Promise<ForumTopicRecord[]> {
   return directus.request(
     readItems('forum_topicos', {
       fields: [
@@ -182,11 +242,11 @@ export function listAllTopics(limit = 1000) {
       sort: ['-data'],
       limit,
     })
-  );
+  ) as Promise<ForumTopicRecord[]>;
 }
 
 // -- Un topic (dÃ©tail)
-export function getOneTopic(id: number) {
+export function getOneTopic(id: number): Promise<ForumTopicRecord> {
   return directus.request(
     readItem('forum_topicos', id, {
       fields: [
@@ -202,40 +262,40 @@ export function getOneTopic(id: number) {
         'status',
       ],
     })
-  );
+  ) as Promise<ForumTopicRecord>;
 }
 
 // -- Un post
-export function getOnePost(id: number) {
+export function getOnePost(id: number): Promise<ForumPostRecord> {
   return directus.request(
     readItem('forum_posts', id, {
       fields: ['id', 'id_topico', 'conteudo', 'autor', 'data', 'status'],
     })
-  );
+  ) as Promise<ForumPostRecord>;
 }
 
-export function listAllPosts(limit = 1000) {
+export function listAllPosts(limit = 1000): Promise<ForumPostRecord[]> {
   return directus.request(
     readItems('forum_posts', {
       fields: ['id', 'id_topico', 'conteudo', 'autor', 'data', 'status'],
       sort: ['-data'],
       limit,
     })
-  );
+  ) as Promise<ForumPostRecord[]>;
 }
 
-export function listForumCategories() {
+export function listForumCategories(): Promise<ForumCategoryRecord[]> {
   return directus.request(
-    readItems('forum_cat' as any, {
-      fields: ['id', 'nome', 'descricao', 'slug', 'ordem'] as any,
-      sort: ['ordem', 'nome'] as any,
-      limit: 50 as any,
-    } as any)
-  );
+    readItems('forum_cat', {
+      fields: ['id', 'nome', 'descricao', 'slug', 'ordem'],
+      sort: ['ordem', 'nome'],
+      limit: 50,
+    })
+  ) as Promise<ForumCategoryRecord[]>;
 }
 
 // -- Commentaires d'un topic
-export function getTopicComments(topicId: number) {
+export function getTopicComments(topicId: number): Promise<ForumCommentRecord[]> {
   return directus.request(
     readItems('forum_coment', {
       filter: { id_forum: { _eq: topicId } }, // FK -> forum_topicos.id
@@ -243,11 +303,11 @@ export function getTopicComments(topicId: number) {
       sort: ['data'],
       limit: 500,
     })
-  );
+  ) as Promise<ForumCommentRecord[]>;
 }
 
 // -- Likes des commentaires d'un topic
-export async function getLikesMapForTopicComments(commentIds: number[]) {
+export async function getLikesMapForTopicComments(commentIds: number[]): Promise<Record<number, number>> {
   if (!commentIds?.length) return {};
   const likes = await directus.request(
     readItems('forum_coment_curtidas', {
@@ -255,16 +315,16 @@ export async function getLikesMapForTopicComments(commentIds: number[]) {
       fields: ['id_comentario'],
       limit: 5000,
     })
-  );
-  return (likes as any[]).reduce((acc: Record<number, number>, row: any) => {
-    const cid = Number(row.id_comentario);
+  ) as LikeRow[];
+  return (likes as LikeRow[]).reduce((acc: Record<number, number>, row: LikeRow) => {
+    const cid = Number((row as LikeRow).id_comentario);
     acc[cid] = (acc[cid] ?? 0) + 1;
     return acc;
   }, {});
 }
 
 // ---------- MEDIA HELPER ----------
-/** RÃ©sout une URL dâ€™image depuis UUID Directus, URL absolue ou /uploads/... */
+/** RÃsout une URL dâ€™image depuis UUID Directus, URL absolue ou /uploads/... */
 export function mediaUrl(idOrPath?: string) {
   if (!idOrPath) return '';
 

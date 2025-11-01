@@ -7,7 +7,7 @@ import {
   export const revalidate = 30;
   
   // gère timestamps en secondes ou millisecondes
-  function fmtDateSmart(v?: string | number) {
+  function fmtDateSmart(v?: string | number | null) {
     if (v == null) return '';
     const n = typeof v === 'string' ? Number(v) : v;
     const d = new Date(n && n < 1e12 ? n * 1000 : n);
@@ -37,7 +37,7 @@ import {
           <div className="text-xs opacity-60">{fmtDateSmart(post.data)}</div>
           <div
             className="mt-3 prose prose-invert max-w-none"
-            dangerouslySetInnerHTML={{ __html: post.conteudo }}
+            dangerouslySetInnerHTML={{ __html: post.conteudo || "" }}
           />
         </article>
   

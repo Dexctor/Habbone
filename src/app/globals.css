@@ -136,6 +136,17 @@
   --ring: var(--blue-500, 224.3 76.3% 48%);
 }
 
+/* Admin page theming: subtler borders/rings matching dark palette */
+.admin-skin {
+  /*
+   * Use HSL triplets so Tailwind tokens like hsl(var(--input)) render correctly.
+   * Subtle, theme‑tinted borders (indigo) and a soft blue ring for focus.
+   */
+  --input: 236 35% 35%; /* approx. #2a2a57 */
+  --border: 236 35% 35%;
+  --ring: 210 90% 60%;  /* approx. #4db8ff */
+}
+
 @theme inline {
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));

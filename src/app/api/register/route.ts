@@ -11,6 +11,9 @@ import {
 import { getHabboUserByNameForHotel } from '@/lib/habbo';
 import { RegisterBodySchema, formatZodError, buildError } from '@/types/api';
 import { computeVerificationExpiry, generateVerificationCode } from '@/lib/verification';
+import * as logger from '@/server/logger';
+
+const RETURN_VERIFICATION_CODE = String(process.env.RETURN_VERIFICATION_CODE || 'true').toLowerCase() !== 'false';
 
 export async function POST(req: Request) {
   try {
@@ -53,13 +56,13 @@ export async function POST(req: Request) {
     const verificationCode = generateVerificationCode();
     const verificationExpiresAt = computeVerificationExpiry();
     const expiresDeltaMs = Date.parse(verificationExpiresAt) - Date.now();
-    console.info('[register] verification payload', {
+    logger.info('[register] verification issued', {
       nick: n,
       hotel: hotelCode,
-      verificationCode,
       verificationExpiresAt,
       expiresDeltaMs,
       nowIso: new Date().toISOString(),
+      code: verificationCode,
     });
 
     // Ãtape 2: CrÃ©er l'utilisateur local
@@ -85,34 +88,35 @@ export async function POST(req: Request) {
         habbo_unique_id: habboCore?.uniqueId ? String(habboCore.uniqueId) : null,
       });
     } catch (patchError) {
-      console.warn('[register] verification patch failed', patchError);
+      logger.warn('[register] verification patch failed', { message: (patchError as any)?.message || String(patchError) });
     }
 
     try {
       const stored = await getUserByNick(n, hotelCode);
-      console.info('[register] stored record check', {
+      logger.info('[register] stored record check', {
         nick: n,
-        storedCode: stored?.habbo_verification_code ?? null,
+        hasCode: Boolean(stored?.habbo_verification_code),
         storedExpires: stored?.habbo_verification_expires_at ?? null,
       });
     } catch (logError) {
-      console.warn('[register] unable to re-fetch user after creation', logError);
+      logger.warn('[register] unable to re-fetch user after creation', { message: (logError as any)?.message || String(logError) });
     }
 
     // Ãtape 3: Stocker un snapshot basique (best-effort, n'Ã©choue pas l'inscription)
     void tryUpdateHabboSnapshotForUser(Number((user as any).id), habboCore);
 
-    return NextResponse.json({
+    const payload: any = {
       ok: true,
       id: (user as any).id,
       habboUniqueId: habboCore?.uniqueId ?? null,
       needsVerification: true,
       verification: {
-        code: verificationCode,
+        ...(RETURN_VERIFICATION_CODE ? { code: verificationCode } : {}),
         expiresAt: verificationExpiresAt,
         hotel: hotelCode,
       },
-    });
+    };
+    return NextResponse.json(payload);
   } catch (e: any) {
     const message = e?.message || 'Erreur serveur';
     const uniqueNick = /UNIQUE constraint failed|duplicate key value/i.test(message);
@@ -121,6 +125,7 @@ export async function POST(req: Request) {
         status: 409,
       });
     }
+    logger.error('[register] server error', { message: (e as any)?.message || String(e) });
     return NextResponse.json(buildError(e?.message || 'Erreur serveur', { code: 'SERVER_ERROR' }), { status: 500 });
   }
 }

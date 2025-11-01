@@ -48,8 +48,8 @@ export default function Footer() {
               <label className="font-bold text-[var(--text-lg)] leading-[22px] flex items-center text-[var(--text-100)]">Extras</label>
             </div>
             <div className="menu flex flex-col space-y-2">
-              <Link href="/imager" className="font-bold text-[var(--text-sm)] leading-[17px] text-[var(--text-100)] text-left hover:text-blue-300 transition-all duration-200 ease-out hover:pl-2">Générateur d'avatar</Link>
-              <Link href="/pseudohabbo" className="font-bold text-[var(--text-sm)] leading-[17px] text-[var(--text-100)] text-left hover:text-blue-300 transition-all duration-200 ease-out hover:pl-2">Changements de pseudo Habbo</Link>
+              <Link href="/imager" prefetch={false} className="font-bold text-[var(--text-sm)] leading-[17px] text-[var(--text-100)] text-left hover:text-blue-300 transition-all duration-200 ease-out hover:pl-2">Générateur d'avatar</Link>
+              <Link href="/pseudohabbo" prefetch={false} className="font-bold text-[var(--text-sm)] leading-[17px] text-[var(--text-100)] text-left hover:text-blue-300 transition-all duration-200 ease-out hover:pl-2">Changements de pseudo Habbo</Link>
             </div>
           </div>
           {/* Logo tile */}
@@ -98,8 +98,8 @@ export default function Footer() {
           <section className="w-full">
             <div className="font-bold uppercase tracking-wide text-[var(--text-500)] mb-4">Extras</div>
             <div className="flex flex-wrap items-center justify-center gap-4">
-              <Link href="/imager" className="inline-flex items-center rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 hover:bg-[var(--blue-500)] hover:text-white transition-all">Générateur d'avatar</Link>
-              <Link href="/pseudohabbo" className="inline-flex items-center rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 hover:bg-[var(--blue-500)] hover:text-white transition-all">Changements de pseudo Habbo</Link>
+              <Link href="/imager" prefetch={false} className="inline-flex items-center rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 hover:bg-[var(--blue-500)] hover:text-white transition-all">Générateur d'avatar</Link>
+              <Link href="/pseudohabbo" prefetch={false} className="inline-flex items-center rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 hover:bg-[var(--blue-500)] hover:text-white transition-all">Changements de pseudo Habbo</Link>
             </div>
           </section>
 

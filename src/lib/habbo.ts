@@ -27,7 +27,7 @@ export interface HabboUserCore {
   currentLevelCompletePercent?: number;
   totalExperience?: number;
   starGemCount?: number;
-  selectedBadges?: Array<any>;
+  selectedBadges?: Array<{ badgeCode?: string; name?: string }>;
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -73,39 +73,76 @@ export async function getHabboUserByIdForHotel(id: string, hotel?: string): Prom
 }
 
 // Heavy/related endpoints (fetched on-demand)
-export async function getHabboUserProfileById(id: string): Promise<any> {
+export interface HabboUserProfile {
+  user: HabboUserCore;
+  badges?: HabboBadge[];
+  friends?: HabboFriend[];
+  groups?: HabboGroup[];
+  rooms?: HabboRoom[];
+}
+
+export async function getHabboUserProfileById(id: string): Promise<HabboUserProfile> {
   const url = `${HABBO_API_BASE}/api/public/users/${encodeURIComponent(id)}/profile`;
-  return fetchJson<any>(url);
+  return fetchJson<HabboUserProfile>(url);
 }
 
-export async function getHabboFriendsById(id: string): Promise<any[]> {
+export interface HabboFriend { uniqueId: string; name: string; online?: boolean; motto?: string; habbo?: string }
+export async function getHabboFriendsById(id: string): Promise<HabboFriend[]> {
   const url = `${HABBO_API_BASE}/api/public/users/${encodeURIComponent(id)}/friends`;
-  return fetchJson<any[]>(url);
+  return fetchJson<HabboFriend[]>(url);
 }
 
-export async function getHabboGroupsById(id: string): Promise<any[]> {
+export interface HabboGroup { id: number; name?: string; badgeCode?: string; description?: string; groupId?: number | string }
+export async function getHabboGroupsById(id: string): Promise<HabboGroup[]> {
   const url = `${HABBO_API_BASE}/api/public/users/${encodeURIComponent(id)}/groups`;
-  return fetchJson<any[]>(url);
+  return fetchJson<HabboGroup[]>(url);
 }
 
-export async function getHabboRoomsById(id: string): Promise<any[]> {
+export interface HabboRoom { id: number; name?: string; ownerName?: string; usersMax?: number; description?: string; creationTime?: string | number }
+export async function getHabboRoomsById(id: string): Promise<HabboRoom[]> {
   const url = `${HABBO_API_BASE}/api/public/users/${encodeURIComponent(id)}/rooms`;
-  return fetchJson<any[]>(url);
+  return fetchJson<HabboRoom[]>(url);
 }
 
-export async function getHabboBadgesById(id: string): Promise<any[]> {
+export interface HabboBadge {
+  // identifiers
+  code?: string
+  badgeCode?: string
+  badge_code?: string
+  badge?: { code?: string }
+  // display fields
+  name?: string
+  description?: string
+  // image/url hints (varies across endpoints)
+  imageUrl?: string
+  badgeImageUrl?: string
+  image?: string
+  url?: string
+  iconUrl?: string
+  icon_url?: string
+  smallImageUrl?: string
+  small_image_url?: string
+  // categorization
+  album?: string
+  badgeAlbum?: string
+  category?: string
+  badgeCategory?: string
+}
+export async function getHabboBadgesById(id: string): Promise<HabboBadge[]> {
   const url = `${HABBO_API_BASE}/api/public/users/${encodeURIComponent(id)}/badges`;
-  return fetchJson<any[]>(url);
+  return fetchJson<HabboBadge[]>(url);
 }
 
 // Achievements by uniqueId
-export async function getHabboAchievementsById(id: string): Promise<any[]> {
+export interface HabboAchievement { id: number; name?: string; level?: number }
+export async function getHabboAchievementsById(id: string): Promise<HabboAchievement[]> {
   const url = `${HABBO_API_BASE}/api/public/achievements/${encodeURIComponent(id)}`;
-  return fetchJson<any[]>(url);
+  return fetchJson<HabboAchievement[]>(url);
 }
 
 // All achievements (definitions) for the hotel
-export async function getAllAchievements(): Promise<any[]> {
+export interface HabboAchievementDef { id: number; name?: string; category?: string }
+export async function getAllAchievements(): Promise<HabboAchievementDef[]> {
   const url = `${HABBO_API_BASE}/api/public/achievements`;
-  return fetchJson<any[]>(url);
+  return fetchJson<HabboAchievementDef[]>(url);
 }

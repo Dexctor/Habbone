@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { assertAdmin } from '@/server/authz';
 import { createRole } from '@/server/directus-service';
+import { resolveHttpError } from '@/lib/http-error';
 
 const Body = z.object({
   name: z.string().min(1),
@@ -13,8 +14,9 @@ const Body = z.object({
 export async function POST(req: Request) {
   try {
     await assertAdmin();
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'FORBIDDEN', code: 'FORBIDDEN' }, { status: e?.status || 403 });
+  } catch (error: unknown) {
+    const { message, status, code } = resolveHttpError(error, 'FORBIDDEN', 403);
+    return NextResponse.json({ error: message, code: code ?? 'FORBIDDEN' }, { status });
   }
   const parsed = Body.safeParse(await req.json());
   if (!parsed.success) {
@@ -23,7 +25,7 @@ export async function POST(req: Request) {
   try {
     const row = await createRole(parsed.data);
     return NextResponse.json({ data: row });
-  } catch (e: any) {
+  } catch (error: unknown) {
     // Fallback: return a virtual role using name as id
     const r = parsed.data;
     const data = {
@@ -33,6 +35,7 @@ export async function POST(req: Request) {
       admin_access: !!r.adminAccess,
       app_access: r.appAccess ?? true,
     };
-    return NextResponse.json({ data, code: 'VIRTUAL_ROLE' });
+    const { message } = resolveHttpError(error, 'ROLE_CREATE_FAILED', 500);
+    return NextResponse.json({ data, code: 'VIRTUAL_ROLE', error: message });
   }
 }

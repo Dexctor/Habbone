@@ -9,6 +9,7 @@ export type StoryItem = {
   alt: string
   author?: string | null
   date?: string | number | null
+  timestamp?: number | null
 }
 
 function fmtDate(v?: string | number | null) {

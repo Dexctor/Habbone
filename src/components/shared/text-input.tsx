@@ -16,15 +16,26 @@ const fieldVariants = cva("rounded-md border bg-background text-foreground focus
   defaultVariants: { tone: "primary" },
 })
 
-export type TextInputProps = Omit<React.ComponentProps<typeof Input>, "size"> &
-  VariantProps<typeof fieldVariants> & {
-    label?: string
-    textarea?: boolean
-    description?: string
-  }
+type BaseExtra = VariantProps<typeof fieldVariants> & {
+  label?: string
+  description?: string
+}
+
+type InputOnlyProps = Omit<React.ComponentProps<typeof Input>, "size" | "id"> & {
+  textarea?: false
+  id?: string
+}
+
+type TextareaOnlyProps = Omit<React.ComponentProps<typeof Textarea>, "id"> & {
+  textarea: true
+  id?: string
+}
+
+export type TextInputProps = (InputOnlyProps | TextareaOnlyProps) & BaseExtra
 
 export default function TextInput({ label, description, className, tone, textarea, id, ...props }: TextInputProps) {
-  const inputId = id ?? React.useId()
+  const autoId = React.useId()
+  const inputId = id ?? autoId
   return (
     <div className="grid gap-1.5">
       {label ? (
@@ -33,9 +44,17 @@ export default function TextInput({ label, description, className, tone, textare
         </Label>
       ) : null}
       {textarea ? (
-        <Textarea id={inputId} className={cn(fieldVariants({ tone }), className)} {...(props as any)} />
+        <Textarea
+          id={inputId}
+          className={cn(fieldVariants({ tone }), className)}
+          {...(props as React.ComponentProps<typeof Textarea>)}
+        />
       ) : (
-        <Input id={inputId} className={cn(fieldVariants({ tone }), className)} {...props} />
+        <Input
+          id={inputId}
+          className={cn(fieldVariants({ tone }), className)}
+          {...(props as React.ComponentProps<typeof Input>)}
+        />
       )}
       {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
     </div>

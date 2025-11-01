@@ -3,15 +3,7 @@
 import { useState } from "react";
 import AdminLists from "@/components/admin/AdminLists";
 import AdminUsersPanel from "@/components/admin/AdminUsersPanel";
-import AdminRolesPanel from "@/components/admin/AdminRolesPanel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 type Fn = (formData: FormData) => Promise<void>;
@@ -63,7 +55,7 @@ export default function AdminDashboard(props: AdminDashboardProps) {
     deleteNewsComment,
   } = props;
 
-  const [rolesModalOpen, setRolesModalOpen] = useState(false);
+  // Roles modal removed: focus on inline actions per user
 
   return (
     <div className="space-y-10">
@@ -113,25 +105,11 @@ export default function AdminDashboard(props: AdminDashboardProps) {
       <section className="space-y-8">
         <DashboardWithHeader
           title="Utilisateurs & affectations"
-          description="Chercher un membre, verifier son statut et ajuster son role en quelques clics."
+          description="Rechercher, voir et ajuster rapidement les roles/statuts par utilisateur."
         >
-          <AdminUsersPanel onOpenRoles={() => setRolesModalOpen(true)} />
+          <AdminUsersPanel />
         </DashboardWithHeader>
       </section>
-
-      <Dialog open={rolesModalOpen} onOpenChange={setRolesModalOpen}>
-        <DialogContent className="max-w-4xl overflow-hidden border border-[color:var(--bg-700)]/50 bg-gradient-to-br from-[color:var(--bg-700)] via-[color:var(--bg-600)] to-[color:var(--bg-800)] px-8 pb-8 pt-7 text-[color:var(--foreground)] shadow-[0_40px_90px_-45px_rgba(0,0,0,0.75)] backdrop-blur data-[state=open]:duration-300 data-[state=closed]:duration-200">
-          <DialogHeader>
-            <DialogTitle>Gestion des roles & acces</DialogTitle>
-            <DialogDescription>
-              Creez, editez ou ajustez les acces admin et application attribues aux roles Directus.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="max-h-[70vh] overflow-y-auto pr-1">
-            <AdminRolesPanel />
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

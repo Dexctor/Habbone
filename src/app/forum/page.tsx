@@ -1,5 +1,5 @@
 import Link from 'next/link'
-
+import { JSX } from 'react'
 import {
   listForumCategoriesService,
   listForumTopicsWithCategories,
@@ -128,20 +128,12 @@ function computeIsAllView(viewParam: string | string[] | undefined): boolean {
   return false
 }
 
-type ForumSearchParams =
-  | Record<string, string | string[]>
-  | Promise<Record<string, string | string[]>>
-  | undefined
+type ForumPageProps = {
+  searchParams?: Promise<Record<string, string | string[]>>
+}
 
-export default async function ForumPage({
-  searchParams,
-}: {
-  searchParams?: ForumSearchParams
-}) {
-  const resolvedSearchParams = ((await Promise.resolve(searchParams)) ?? {}) as Record<
-    string,
-    string | string[]
-  >
+export default async function ForumPage({ searchParams }: ForumPageProps) {
+  const resolvedSearchParams = ((await searchParams) ?? {}) as Record<string, string | string[]>
   const isAllView = computeIsAllView(resolvedSearchParams.view)
 
   const [rawCategories, rawTopics] = await Promise.all([
@@ -155,7 +147,7 @@ export default async function ForumPage({
     ? ((rawCategories as { data?: ForumCategory[] }).data as ForumCategory[])
     : []
 
-  const categories =
+  const categories: ForumCategory[] =
     fetchedCategories.length > 0
       ? fetchedCategories
           .filter(
@@ -164,7 +156,7 @@ export default async function ForumPage({
               isActiveCategory(category),
           )
           .map((category) => ({ ...category }))
-      : TARGET_CATEGORY_IDS.map((id) => ({
+      : (TARGET_CATEGORY_IDS.map((id) => ({
           id,
           nome:
             id === '1'
@@ -174,7 +166,9 @@ export default async function ForumPage({
               : id === '3'
               ? 'General'
               : 'Videos',
-        }))
+          descricao: null,
+          status: null,
+        })) as ForumCategory[])
 
   const topics = Array.isArray(rawTopics)
     ? (rawTopics as ForumTopic[])

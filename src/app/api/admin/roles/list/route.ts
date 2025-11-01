@@ -1,30 +1,22 @@
 import { NextResponse } from 'next/server';
 import { assertAdmin } from '@/server/authz';
 import { listRoles } from '@/server/directus-service';
-
-const FALLBACK = [
-  { name: 'Fondateur', description: 'Tous les accès (site + admin)', adminAccess: true, appAccess: true },
-  { name: 'Responsables', description: 'Gérer le site (articles, validations, modération)', adminAccess: true, appAccess: true },
-  { name: 'Journalistes', description: 'Créer des articles (validation requise)', adminAccess: false, appAccess: true },
-  { name: 'Correcteur', description: 'Corriger/relire les articles (sans publier)', adminAccess: false, appAccess: true },
-  { name: 'Constructeurs', description: 'Création de contenus (validation requise)', adminAccess: false, appAccess: true },
-  { name: 'Configurateur WIRED', description: 'Contenu WIRED (validation requise)', adminAccess: false, appAccess: true },
-  { name: 'Graphistes', description: 'Accès de base + médias', adminAccess: false, appAccess: true },
-  { name: 'Animateurs', description: 'Demandes de points (validation responsable/fondateur)', adminAccess: false, appAccess: true },
-];
+import { DEFAULT_ROLES } from '@/lib/config/roles';
+import { resolveHttpError } from '@/lib/http-error';
 
 export async function GET() {
   try {
     await assertAdmin();
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'FORBIDDEN', code: 'FORBIDDEN' }, { status: e?.status || 403 });
+  } catch (error: unknown) {
+    const { message, status, code } = resolveHttpError(error, 'FORBIDDEN', 403);
+    return NextResponse.json({ error: message, code: code ?? 'FORBIDDEN' }, { status });
   }
   try {
     const rows = await listRoles();
     if (Array.isArray(rows) && rows.length) return NextResponse.json({ data: rows });
   } catch {}
   // Fallback virtual roles (no Directus system access)
-  const data = FALLBACK.map((r) => ({
+  const data = DEFAULT_ROLES.map((r) => ({
     id: r.name, // use name as id when system roles are unavailable
     name: r.name,
     description: r.description,

@@ -1,29 +1,24 @@
 import { NextResponse } from 'next/server'
-
-import { buildError, formatZodError, VerificationRegenerateSchema } from '@/types/api'
-import {
-  getUserByNick,
-  listUsersByNick,
-  normalizeHotelCode,
-  updateUserVerification,
-} from '@/server/directus-service'
+import { VerificationRegenerateSchema, formatZodError, buildError } from '@/types/api'
+import { getUserByNick, listUsersByNick, normalizeHotelCode, updateUserVerification } from '@/server/directus-service'
 import { computeVerificationExpiry, generateVerificationCode } from '@/lib/verification'
+import * as logger from '@/server/logger'
+
+const RETURN_VERIFICATION_CODE = String(process.env.RETURN_VERIFICATION_CODE || 'true').toLowerCase() !== 'false';
 
 export async function POST(req: Request) {
   try {
     const raw = await req.json().catch(() => ({}))
     const parsed = VerificationRegenerateSchema.safeParse({
       nick: raw?.nick,
-      hotel: raw?.hotel,
     })
-
     if (!parsed.success) {
       return NextResponse.json(
         buildError('Erreur de validation', {
           code: 'VALIDATION_ERROR',
           fields: formatZodError(parsed.error).fieldErrors,
         }),
-        { status: 400 }
+        { status: 400 },
       )
     }
 
@@ -31,38 +26,26 @@ export async function POST(req: Request) {
     const hotelCode = hotel ? normalizeHotelCode(hotel) : null
 
     let user: any = null
-
     if (hotelCode) {
       user = await getUserByNick(nick, hotelCode)
     } else {
       const users = await listUsersByNick(nick)
       if (!users.length) {
-        return NextResponse.json(buildError('Utilisateur introuvable', { code: 'NOT_FOUND' }), {
-          status: 404,
-        })
+        return NextResponse.json(buildError('Utilisateur introuvable', { code: 'NOT_FOUND' }), { status: 404 })
       }
       if (users.length > 1) {
-        return NextResponse.json(
-          buildError("Plusieurs comptes existent pour ce pseudo, precise l'hotel.", {
-            code: 'HOTEL_REQUIRED',
-          }),
-          { status: 409 }
-        )
+        return NextResponse.json(buildError('Plusieurs comptes existent pour ce pseudo, prÃ©cise un hôtel ', { code: 'HOTEL_REQUIRED' }), { status: 409 })
       }
       user = users[0]
     }
 
     if (!user) {
-      return NextResponse.json(buildError('Utilisateur introuvable', { code: 'NOT_FOUND' }), {
-        status: 404,
-      })
+      return NextResponse.json(buildError('Utilisateur introuvable', { code: 'NOT_FOUND' }), { status: 404 })
     }
 
     const status = String((user as any)?.habbo_verification_status || '')
     if (status === 'locked') {
-      return NextResponse.json(buildError('Verification verrouillee.', { code: 'LOCKED' }), {
-        status: 423,
-      })
+      return NextResponse.json(buildError('VÃ©rification verrouillÃ©e.', { code: 'LOCKED' }), { status: 423 })
     }
     if (status === 'ok') {
       return NextResponse.json({ ok: true, code: null, expiresAt: null, alreadyVerified: true })
@@ -70,6 +53,13 @@ export async function POST(req: Request) {
 
     const code = generateVerificationCode()
     const expiresAt = computeVerificationExpiry()
+    logger.info('[verify/regenerate] code reissued', {
+      nick,
+      expiresAt,
+      deltaMs: Date.parse(expiresAt) - Date.now(),
+      nowIso: new Date().toISOString(),
+      code,
+    })
 
     await updateUserVerification(Number((user as any).id), {
       habbo_verification_status: 'pending',
@@ -77,16 +67,14 @@ export async function POST(req: Request) {
       habbo_verification_expires_at: expiresAt,
     })
 
-    return NextResponse.json({
-      ok: true,
-      code,
-      expiresAt,
-    })
+    const payload: any = { ok: true, expiresAt }
+    if (RETURN_VERIFICATION_CODE) (payload as any).code = code
+    return NextResponse.json(payload)
   } catch (error: any) {
+    logger.error('[verify/regenerate] server error', { message: error?.message || String(error) })
     return NextResponse.json(
       buildError(error?.message || 'Erreur serveur', { code: 'SERVER_ERROR' }),
-      { status: 500 }
+      { status: 500 },
     )
   }
 }
-

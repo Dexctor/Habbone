@@ -189,7 +189,7 @@ export default async function AdminPage() {
   }, {});
 
   return (
-    <main className="mx-auto max-w-6xl space-y-8 p-6">
+    <main className="admin-skin mx-auto max-w-6xl space-y-8 p-6">
       <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Espace administration</h1>

@@ -12,22 +12,30 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { Skeleton } from "@/components/ui/skeleton";
 import { BadgeIcon } from "./modules/BadgeIcon";
 import Link from "next/link";
-import { listNewsByAuthor, mediaUrl } from "@/lib/directus";
+import { mediaUrl } from "@/lib/directus";
+import type { HabboUserCore, HabboFriend, HabboGroup, HabboRoom, HabboBadge, HabboAchievement } from "@/lib/habbo";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import "./profile.tailwind.css";
 
 type HabboProfileResponse = {
-  user: any;
-  profile: any | null;
-  friends: any[];
-  groups: any[];
-  rooms: any[];
-  badges: any[];
+  user: HabboUserCore;
+  profile: unknown | null;
+  friends: HabboFriend[];
+  groups: HabboGroup[];
+  rooms: HabboRoom[];
+  badges: HabboBadge[];
   uniqueId: string;
-  achievements?: any[];
+  achievements?: HabboAchievement[];
   achievementsCount?: number;
   achievementsTotalCount?: number;
 };
+
+declare global {
+  interface Window {
+    __habboProfile?: HabboProfileResponse;
+    __habboLevel?: number | null;
+  }
+}
 
 const PAGE_SIZE = 100;
 const HABBO_BASE = process.env.NEXT_PUBLIC_HABBO_BASE || "https://www.habbo.fr";
@@ -41,7 +49,8 @@ export default function ProfileClient({ nick }: { nick: string }) {
   const [groupsPage, setGroupsPage] = useState(1);
   const [badgesPage, setBadgesPage] = useState(1);
   const [roomsPage, setRoomsPage] = useState(1);
-  const [articles, setArticles] = useState<any[]>([]);
+  type ArticleCard = { id: number | string; imagem?: string; titulo?: string; autor?: string; data?: string | number | null };
+  const [articles, setArticles] = useState<ArticleCard[]>([]);
   const [articlesLoading, setArticlesLoading] = useState(false);
   const [articlesPage, setArticlesPage] = useState(0);
   const [articlesDir, setArticlesDir] = useState<1 | -1>(1);
@@ -58,13 +67,16 @@ export default function ProfileClient({ nick }: { nick: string }) {
         const res = await fetch(`/api/habbo/profile?name=${encodeURIComponent(nick)}`, {
           cache: "no-store",
         });
-        const json = (await res.json()) as HabboProfileResponse | { error: string };
+        const json = (await res.json()) as unknown;
         if (!res.ok) {
-          throw new Error((json as any)?.error || "Erreur de récupération du profil");
+          const maybeErr = (json as { error?: unknown })?.error;
+          const msg = typeof maybeErr === "string" ? maybeErr : "Erreur de récupération du profil";
+          throw new Error(msg);
         }
         if (mounted) setData(json as HabboProfileResponse);
-      } catch (e: any) {
-        if (mounted) setError(e?.message || "Erreur");
+      } catch (e: unknown) {
+        const msg = e && typeof e === "object" && "message" in e ? String((e as any).message) : "Erreur";
+        if (mounted) setError(msg);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -81,33 +93,51 @@ export default function ProfileClient({ nick }: { nick: string }) {
   useEffect(() => {
     if (typeof window === "undefined" || !data) return;
     try {
-      (window as any).__habboProfile = data;
-      const lvl = data?.user?.currentLevel ?? (data as any)?.profile?.currentLevel ?? null;
-      (window as any).__habboLevel = typeof lvl === "number" ? lvl : null;
+      window.__habboProfile = data;
+      const lvl = typeof data.user?.currentLevel === "number" ? data.user.currentLevel : null;
+      window.__habboLevel = lvl;
       window.dispatchEvent(new CustomEvent("habbo:profile", { detail: data }));
     } catch {}
   }, [data]);
 
   // Fetch articles by logged user nick
   useEffect(() => {
-    const author = (data as any)?.user?.name || nick;
+    const author = data?.user?.name || nick;
     if (!author) return;
+
     let cancelled = false;
+    const controller = new AbortController();
     setArticlesLoading(true);
-    listNewsByAuthor(author, 30)
-      .then((rows: any) => {
-        if (!cancelled) setArticles(Array.isArray(rows) ? rows : []);
-      })
-      .catch(() => {
+
+    const load = async () => {
+      try {
+        const response = await fetch(
+          `/api/profile/articles?author=${encodeURIComponent(author)}`,
+          { cache: "no-store", signal: controller.signal }
+        );
+        const payload = (await response.json().catch(() => null)) as unknown;
+        if (cancelled) return;
+        if (!response.ok) {
+          const maybeErr = (payload as { error?: unknown } | null)?.error;
+          const msg = typeof maybeErr === "string" ? maybeErr : "Erreur de récupération des articles";
+          throw new Error(msg);
+        }
+        const rows = (payload as { data?: unknown } | null)?.data;
+        setArticles(Array.isArray(rows) ? (rows as ArticleCard[]) : []);
+      } catch {
         if (!cancelled) setArticles([]);
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setArticlesLoading(false);
-      });
+      }
+    };
+
+    load();
+
     return () => {
       cancelled = true;
+      controller.abort();
     };
-  }, [nick, (data as any)?.user?.name]);
+  }, [nick, data?.user?.name]);
 
   // Reset page when data changes
   useEffect(() => {
@@ -126,14 +156,12 @@ export default function ProfileClient({ nick }: { nick: string }) {
   );
 
   const counts = useMemo(() => {
-    const achCount = typeof (data as any)?.achievementsCount === "number"
-      ? (data as any).achievementsCount
+    const achCount = typeof data?.achievementsCount === "number"
+      ? data.achievementsCount
       : Array.isArray(data?.achievements)
-        ? data!.achievements!.length
+        ? data.achievements.length
         : 0;
-    const achTotal = typeof (data as any)?.achievementsTotalCount === "number"
-      ? (data as any).achievementsTotalCount
-      : undefined;
+    const achTotal = typeof data?.achievementsTotalCount === "number" ? data.achievementsTotalCount : undefined;
     return {
       friends: data?.friends?.length ?? 0,
       groups: data?.groups?.length ?? 0,
@@ -170,7 +198,7 @@ export default function ProfileClient({ nick }: { nick: string }) {
   }
 
   // Flexible date formatter for Directus values (ISO, ms, or seconds)
-  function fmtDateFlexible(v?: any): string {
+  function fmtDateFlexible(v?: unknown): string {
     if (v == null || v === "") return "";
     if (typeof v === "number") {
       const ms = v > 1e12 ? v : v * 1000; // seconds -> ms
@@ -186,7 +214,7 @@ export default function ProfileClient({ nick }: { nick: string }) {
   }
 
   const headerAvatarUrl = `${HABBO_BASE}/habbo-imaging/avatarimage?user=${encodeURIComponent(
-    (data as any)?.user?.name || nick || ""
+    data?.user?.name || nick || ""
   )}&direction=2&head_direction=3&img_format=png&size=l`;
 
   return (
@@ -273,7 +301,7 @@ export default function ProfileClient({ nick }: { nick: string }) {
                       transition={{ duration: 0.2 }}
                     >
                       <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {visibleArticles.map((a: any) => (
+                        {visibleArticles.map((a: ArticleCard) => (
                           <li key={a.id} className="border rounded p-3 border-[color:var(--border)]">
                             <div className="flex gap-3">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -317,7 +345,7 @@ export default function ProfileClient({ nick }: { nick: string }) {
                 <>
                   <ScrollArea className="max-h-72 scroll-area">
                     <ul className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 overflow-x-hidden">
-                      {friendsVisible.map((f: any, idx) => (
+                      {friendsVisible.map((f: HabboFriend, idx) => (
                         <li
                           key={f?.uniqueId || f?.name || idx}
                           className="group flex flex-col items-center text-center gap-3 border rounded p-2 border-[color:var(--border)] bg-[color:var(--bg-700)] hover:bg-[color:var(--bg-600)] transition min-w-0"
@@ -373,7 +401,7 @@ export default function ProfileClient({ nick }: { nick: string }) {
                 <>
                   <ScrollArea className="max-h-72 scroll-area">
                     <ul className="space-y-3">
-                      {groupsVisible.map((g: any, idx) => (
+                      {groupsVisible.map((g: HabboGroup, idx) => (
                         <li key={g?.id || g?.groupId || idx} className="border rounded p-2 border-[color:var(--border)]">
                           <div className="font-medium">{g?.name || "—"}</div>
                           {g?.description && <div className="text-xs opacity-70">{g.description}</div>}
@@ -397,7 +425,7 @@ export default function ProfileClient({ nick }: { nick: string }) {
                 <>
                   <ScrollArea className="max-h-72 scroll-area">
                     <ul className="grid grid-cols-6 sm:grid-cols-10 gap-2">
-                      {badgesVisible.map((b: any, idx) => {
+                      {badgesVisible.map((b: HabboBadge, idx) => {
                         const rawCode = (b?.code || b?.badgeCode || b?.badge_code || b?.badge?.code || '').toString();
                         // Preserve original case; CDN filenames for ACH_* are case-sensitive (e.g., ACH_Tutorial3)
                         const code = rawCode.trim();
@@ -454,7 +482,7 @@ export default function ProfileClient({ nick }: { nick: string }) {
             <ProfileSection title="Salles">
               <ScrollArea className="max-h-72 scroll-area">
                 <ul className="space-y-3">
-                  {roomsVisible.map((r: any, idx) => (
+                  {roomsVisible.map((r: HabboRoom, idx) => (
                     <li key={r?.id || idx} className="border rounded p-2 border-[color:var(--border)]">
                       <div className="font-medium">{r?.name || "—"}</div>
                       {r?.description && <div className="text-xs opacity-70">{r.description}</div>}
@@ -505,9 +533,16 @@ export default function ProfileClient({ nick }: { nick: string }) {
                   // trigger effect by changing nick dependency pattern if needed
                   // here just re-run current fetch
                   fetch(`/api/habbo/profile?name=${encodeURIComponent(nick)}`, { cache: "no-store" })
-                    .then((r) => r.json())
-                    .then((json) => setData(json as any))
-                    .catch((e) => setError(e?.message || "Erreur"))
+                    .then(async (r) => {
+                      const body = (await r.json().catch(() => null)) as unknown;
+                      if (!r.ok) {
+                        const maybeErr = (body as { error?: unknown } | null)?.error;
+                        const msg = typeof maybeErr === 'string' ? maybeErr : 'Erreur de récupération du profil';
+                        throw new Error(msg);
+                      }
+                      setData(body as HabboProfileResponse);
+                    })
+                    .catch((e: unknown) => setError(e && typeof e === 'object' && 'message' in e ? String((e as any).message) : 'Erreur'))
                     .finally(() => setLoading(false));
                 }, 0);
               }}

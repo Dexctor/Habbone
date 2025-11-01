@@ -148,7 +148,7 @@ export default function AdminLists(props: {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-4 p-12">
         <Input
           placeholder="Rechercher (titre, auteur, id)"
           value={q}
@@ -161,23 +161,23 @@ export default function AdminLists(props: {
         </span>
       </div>
 
-      <Accordion type="single" collapsible className="w-full">
+      <Accordion type="single" collapsible className="w-full space-y-4">
         {showTopics && (
           <AccordionItem
             value="topics"
-            className="mb-4 rounded-lg border border-[color:var(--bg-800)] bg-[color:var(--bg-600)]"
+            className="rounded-lg border border-[color:var(--bg-700)]/60 bg-[color:var(--bg-600)] shadow-[0_18px_50px_-35px_rgba(0,0,0,0.6)]"
           >
-            <AccordionTrigger className="px-4">
+            <AccordionTrigger className="px-5 py-3 hover:bg-[color:var(--bg-700)]/40">
               <span className="text-base font-semibold">Forum – Sujets ({topicsView.length})</span>
             </AccordionTrigger>
-            <AccordionContent className="px-4">
+            <AccordionContent className="px-5 pb-5">
               <SectionList
                 emptyLabel="Aucun sujet trouvé."
                 items={topicsView}
                 getKey={(t: any) => t.id}
                 render={(t: any) => (
-                  <Card className="border-[color:var(--bg-800)] bg-[color:var(--bg-700)] ">
-                    <CardHeader className="pb-2">
+                  <Card className="border-[color:var(--bg-800)] bg-[color:var(--bg-700)]">
+                    <CardHeader className="pb-3 pt-3">
                       <CardTitle className="text-base font-semibold">{t.titulo || "(sans titre)"}</CardTitle>
                       <div className="flex items-center gap-2">
                         <CardDescription className="text-xs">
@@ -186,7 +186,7 @@ export default function AdminLists(props: {
                         {t?.status ? <Badge variant="secondary">{String(t.status)}</Badge> : null}
                       </div>
                     </CardHeader>
-                    <CardFooter className="gap-2 pt-2">
+                    <CardFooter className="gap-2 pt-3">
                       <Button
                         type="button"
                         variant="default"
@@ -209,8 +209,8 @@ export default function AdminLists(props: {
                           exit={{ height: 0, opacity: 0 }}
                           transition={{ duration: 0.2 }}
                         >
-                          <CardContent className="pt-4">
-                            <form action={props.updateTopic} className="flex flex-col gap-3">
+                          <CardContent className="pt-5">
+                            <form action={props.updateTopic} className="flex flex-col gap-4">
                               <input type="hidden" name="id" value={t.id} />
                               <div className="grid gap-3 md:grid-cols-2">
                                 <Field label="Titre">
@@ -223,7 +223,7 @@ export default function AdminLists(props: {
                               <Field label="Contenu">
                                 <RichEditor name="conteudo" initialHTML={t.conteudo || ""} variant="full" />
                               </Field>
-                              <div className="flex items-center gap-6 text-sm">
+                              <div className="flex items-center gap-6 text-sm pt-1">
                                 <label className="flex items-center gap-2">
                                   <input type="checkbox" name="fixo" defaultChecked={!!t.fixo} /> <span>Épinglé</span>
                                 </label>
@@ -247,19 +247,19 @@ export default function AdminLists(props: {
         {showPosts && (
           <AccordionItem
             value="posts"
-            className="mb-4 rounded-lg border border-[color:var(--bg-800)] bg-[color:var(--bg-600)]"
+            className="rounded-lg border border-[color:var(--bg-700)]/60 bg-[color:var(--bg-600)] shadow-[0_18px_50px_-35px_rgba(0,0,0,0.6)]"
           >
-            <AccordionTrigger className="px-4">
+            <AccordionTrigger className="px-5 py-3 hover:bg-[color:var(--bg-700)]/40">
               <span className="text-base font-semibold">Forum – Messages ({postsView.length})</span>
             </AccordionTrigger>
-            <AccordionContent className="px-4">
+            <AccordionContent className="px-5 pb-5">
               <SectionList
                 emptyLabel="Aucun message trouvé."
                 items={postsView}
                 getKey={(p: any) => p.id}
                 render={(p: any) => (
                   <Card className="border-[color:var(--bg-800)] bg-[color:var(--bg-700)]">
-                    <CardHeader className="pb-2">
+                    <CardHeader className="pb-3 pt-3">
                       <CardTitle className="text-base font-semibold">
                         {props.topicTitleById?.[Number(p.id_topico)] || `Sujet #${p.id_topico}`}
                       </CardTitle>
@@ -271,14 +271,14 @@ export default function AdminLists(props: {
                       </div>
                     </CardHeader>
                     {p.conteudo && (
-                      <CardContent className="pt-0">
+                      <CardContent className="pt-1">
                         <div
                           className="line-clamp-2 text-sm opacity-90"
                           dangerouslySetInnerHTML={{ __html: String(p.conteudo) }}
                         />
                       </CardContent>
                     )}
-                    <CardFooter className="gap-2">
+                    <CardFooter className="gap-2 pt-3">
                       <Button
                         type="button"
                         variant="default"
@@ -301,8 +301,8 @@ export default function AdminLists(props: {
                           exit={{ height: 0, opacity: 0 }}
                           transition={{ duration: 0.2 }}
                         >
-                          <CardContent className="pt-4">
-                            <form action={props.updatePost} className="flex flex-col gap-3">
+                          <CardContent className="pt-5">
+                            <form action={props.updatePost} className="flex flex-col gap-4">
                               <input type="hidden" name="id" value={p.id} />
                               <Field label="Contenu">
                                 <RichEditor name="conteudo" initialHTML={p.conteudo || ""} variant="full" />
@@ -323,19 +323,19 @@ export default function AdminLists(props: {
         {showArticles && (
           <AccordionItem
             value="news"
-            className="mb-4 rounded-lg border border-[color:var(--bg-800)] bg-[color:var(--bg-600)]"
+            className="rounded-lg border border-[color:var(--bg-700)]/60 bg-[color:var(--bg-600)] shadow-[0_18px_50px_-35px_rgba(0,0,0,0.6)]"
           >
-            <AccordionTrigger className="px-4">
+            <AccordionTrigger className="px-5 py-3 hover:bg-[color:var(--bg-700)]/40">
               <span className="text-base font-semibold">Articles ({newsView.length})</span>
             </AccordionTrigger>
-            <AccordionContent className="px-4">
+            <AccordionContent className="px-5 pb-5">
               <SectionList
                 emptyLabel="Aucun article trouvé."
                 items={newsView}
                 getKey={(n: any) => n.id}
                 render={(n: any) => (
                   <Card className="border-[color:var(--bg-800)] bg-[color:var(--bg-700)]">
-                    <CardHeader className="pb-2">
+                    <CardHeader className="pb-3 pt-3">
                       <CardTitle className="text-base font-semibold">{n.titulo || "(sans titre)"}</CardTitle>
                       <div className="flex items-center gap-2">
                         <CardDescription className="text-xs">
@@ -345,11 +345,11 @@ export default function AdminLists(props: {
                       </div>
                     </CardHeader>
                     {n.descricao && (
-                      <CardContent className="pt-0">
+                      <CardContent className="pt-1">
                         <p className="text-sm opacity-80">{n.descricao}</p>
                       </CardContent>
                     )}
-                    <CardFooter className="gap-2">
+                    <CardFooter className="gap-2 pt-3">
                       <Button
                         type="button"
                         variant="default"
@@ -372,8 +372,8 @@ export default function AdminLists(props: {
                           exit={{ height: 0, opacity: 0 }}
                           transition={{ duration: 0.2 }}
                         >
-                          <CardContent className="pt-4">
-                            <form action={props.updateArticle} className="flex flex-col gap-3">
+                          <CardContent className="pt-5">
+                            <form action={props.updateArticle} className="flex flex-col gap-4">
                               <input type="hidden" name="id" value={n.id} />
                               <div className="grid gap-3 md:grid-cols-2">
                                 <Field label="Titre">
@@ -405,25 +405,25 @@ export default function AdminLists(props: {
         {showNewsComments && (
           <AccordionItem
             value="news-comments"
-            className="mb-4 rounded-lg border border-[color:var(--bg-800)] bg-[color:var(--bg-600)]"
+            className="rounded-lg border border-[color:var(--bg-700)]/60 bg-[color:var(--bg-600)] shadow-[0_18px_50px_-35px_rgba(0,0,0,0.6)]"
           >
-            <AccordionTrigger className="px-4">
+            <AccordionTrigger className="px-5 py-3 hover:bg-[color:var(--bg-700)]/40">
               <span className="text-base font-semibold">Articles – Commentaires ({newsCommentsView.length})</span>
             </AccordionTrigger>
-            <AccordionContent className="px-4">
+            <AccordionContent className="px-5 pb-5">
               <SectionList
                 emptyLabel="Aucun commentaire trouvé."
                 items={newsCommentsView}
                 getKey={(c: any) => c.id}
                 render={(c: any) => (
                   <Card className="border-[color:var(--bg-800)] bg-[color:var(--bg-700)]">
-                    <CardHeader className="pb-2">
+                    <CardHeader className="pb-3 pt-3">
                       <CardTitle className="text-base font-semibold">Commentaire #{c.id}</CardTitle>
                       <CardDescription className="text-xs">
                         Article #{c.id_noticia} · {c.autor || "-"} · {formatDate(c.data)}
                       </CardDescription>
                     </CardHeader>
-                    <CardFooter className="gap-2 pt-2">
+                    <CardFooter className="gap-2 pt-3">
                       <Button
                         type="button"
                         variant="default"
@@ -446,8 +446,8 @@ export default function AdminLists(props: {
                           exit={{ height: 0, opacity: 0 }}
                           transition={{ duration: 0.2 }}
                         >
-                          <CardContent className="pt-4">
-                            <form action={props.updateNewsComment} className="flex flex-col gap-3">
+                          <CardContent className="pt-5">
+                            <form action={props.updateNewsComment} className="flex flex-col gap-4">
                               <input type="hidden" name="id" value={c.id} />
                               <Field label="Contenu">
                                 <RichEditor name="comentario" initialHTML={c.comentario || ""} variant="simple" />
@@ -468,25 +468,25 @@ export default function AdminLists(props: {
         {showForumComments && (
           <AccordionItem
             value="forum-comments"
-            className="rounded-lg border border-[color:var(--bg-800)] bg-[color:var(--bg-600)]"
+            className="rounded-lg border border-[color:var(--bg-700)]/60 bg-[color:var(--bg-600)] shadow-[0_18px_50px_-35px_rgba(0,0,0,0.6)]"
           >
-            <AccordionTrigger className="px-4">
+            <AccordionTrigger className="px-5 py-3 hover:bg-[color:var(--bg-700)]/40">
               <span className="text-base font-semibold">Forum – Commentaires ({forumCommentsView.length})</span>
             </AccordionTrigger>
-            <AccordionContent className="px-4">
+            <AccordionContent className="px-5 pb-5">
               <SectionList
                 emptyLabel="Aucun commentaire trouvé."
                 items={forumCommentsView}
                 getKey={(c: any) => c.id}
                 render={(c: any) => (
                   <Card className="border-[color:var(--bg-800)] bg-[color:var(--bg-700)]">
-                    <CardHeader className="pb-2">
+                    <CardHeader className="pb-3 pt-3">
                       <CardTitle className="text-base font-semibold">Commentaire #{c.id}</CardTitle>
                       <CardDescription className="text-xs">
                         Sujet #{c.id_forum} · {c.autor || "-"} · {formatDate(c.data)}
                       </CardDescription>
                     </CardHeader>
-                    <CardFooter className="gap-2 pt-2">
+                    <CardFooter className="gap-2 pt-3">
                       <Button
                         type="button"
                         variant="default"
@@ -509,8 +509,8 @@ export default function AdminLists(props: {
                           exit={{ height: 0, opacity: 0 }}
                           transition={{ duration: 0.2 }}
                         >
-                          <CardContent className="pt-4">
-                            <form action={props.updateForumComment} className="flex flex-col gap-3">
+                          <CardContent className="pt-5">
+                            <form action={props.updateForumComment} className="flex flex-col gap-4">
                               <input type="hidden" name="id" value={c.id} />
                               <Field label="Contenu">
                                 <RichEditor name="comentario" initialHTML={c.comentario || ""} variant="simple" />

@@ -3,10 +3,11 @@
 import { Card, CardBody, CardHeader, CardTitle } from "./Card";
 import { HabboAvatar } from "./HabboAvatar";
 import { motion, useReducedMotion } from "framer-motion";
+import type { HabboFriend } from "@/lib/habbo";
 
 type Props = {
   title?: string;
-  friends: any[];
+  friends: HabboFriend[];
   totalCount: number;
   visibleCount: number;
   pageSize: number;
@@ -33,7 +34,7 @@ export function ProfileFriendsList({
         <CardBody>
           <div className="max-h-72 overflow-auto rounded-md border border-[color:var(--border)] p-3">
             <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {friends.map((f: any, idx) => (
+              {friends.map((f: HabboFriend, idx) => (
                 <li key={f?.uniqueId || f?.name || idx} className="flex items-center gap-3 border border-[color:var(--border)] rounded p-2">
                   <HabboAvatar nick={f?.name || f?.habbo || ''} />
                   <div className="min-w-0">

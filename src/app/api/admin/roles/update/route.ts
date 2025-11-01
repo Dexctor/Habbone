@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { assertAdmin } from '@/server/authz';
 import { updateRole } from '@/server/directus-service';
+import { resolveHttpError } from '@/lib/http-error';
 
 const Body = z.object({
   roleId: z.string().min(1),
@@ -14,8 +15,9 @@ const Body = z.object({
 export async function POST(req: Request) {
   try {
     await assertAdmin();
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'FORBIDDEN', code: 'FORBIDDEN' }, { status: e?.status || 403 });
+  } catch (error: unknown) {
+    const { message, status, code } = resolveHttpError(error, 'FORBIDDEN', 403);
+    return NextResponse.json({ error: message, code: code ?? 'FORBIDDEN' }, { status });
   }
   const parsed = Body.safeParse(await req.json());
   if (!parsed.success) {
@@ -25,8 +27,8 @@ export async function POST(req: Request) {
     const { roleId, ...patch } = parsed.data;
     const row = await updateRole(roleId, patch);
     return NextResponse.json({ data: row });
-  } catch (e: any) {
-    return NextResponse.json({ error: 'UPDATE_ROLE_FAILED', code: 'UPDATE_ROLE_FAILED' }, { status: 500 });
+  } catch (error: unknown) {
+    const { message, status, code } = resolveHttpError(error, 'UPDATE_ROLE_FAILED', 500);
+    return NextResponse.json({ error: message, code: code ?? 'UPDATE_ROLE_FAILED' }, { status });
   }
 }
-

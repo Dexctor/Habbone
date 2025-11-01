@@ -8,6 +8,7 @@ import {
 } from '@/server/directus-service'
 import { getHabboUserByIdForHotel, getHabboUserByNameForHotel } from '@/lib/habbo'
 import { isVerificationExpired } from '@/lib/verification'
+import * as logger from '@/server/logger'
 
 const ERROR_NOT_FOUND = buildError('Utilisateur introuvable', { code: 'NOT_FOUND' })
 
@@ -28,11 +29,11 @@ export async function POST(req: Request) {
       )
     }
     const { nick, code } = parsed.data
-    console.info('[verify/status] request', { nick, code })
+    logger.info('[verify/status] request', { nick, hasCode: Boolean(code) })
 
     const users = await listUsersByNick(nick)
     if (!users.length) {
-      console.warn('[verify/status] user not found', { nick })
+      logger.warn('[verify/status] user not found', { nick })
       return NextResponse.json(ERROR_NOT_FOUND, { status: 404 })
     }
 
@@ -50,27 +51,27 @@ export async function POST(req: Request) {
     const hotel = normalizeHotelCode((user as any)?.habbo_hotel)
     let uniqueId = String((user as any)?.habbo_unique_id || '')
 
-    console.info('[verify/status] user state', {
+    logger.info('[verify/status] user state', {
       nick,
       status,
-      storedCode,
+      hasStoredCode: Boolean(storedCode),
       expiresAt,
       hotel,
       uniqueId,
     })
 
     if (status === 'locked') {
-      console.warn('[verify/status] locked', { nick });
+      logger.warn('[verify/status] locked', { nick });
       return NextResponse.json(buildError('Vérification verrouillée.', { code: 'LOCKED' }), { status: 423 })
     }
 
     if (status === 'ok') {
-      console.info('[verify/status] already verified', { nick })
+      logger.info('[verify/status] already verified', { nick })
       return NextResponse.json({ verified: true, status })
     }
 
     if (!storedCode) {
-      console.warn('[verify/status] code missing', { nick })
+      logger.warn('[verify/status] code missing', { nick })
       return NextResponse.json(
         buildError('Code de vérification absent, veuillez en générer un nouveau.', { code: 'CODE_MISSING' }),
         { status: 409 },
@@ -78,13 +79,17 @@ export async function POST(req: Request) {
     }
 
     if (storedCode !== code) {
-      console.warn('[verify/status] code mismatch', { nick, expected: storedCode, received: code })
+      logger.warn('[verify/status] code mismatch', {
+        nick,
+        hasStoredCode: Boolean(storedCode),
+        receivedLength: code.length,
+      })
       return NextResponse.json(buildError('Code invalide.', { code: 'CODE_MISMATCH' }), { status: 403 })
     }
 
     const normalizedExpiresAt = expiresAt && (expiresAt.endsWith('Z') || /[+-]\d\d:?\d\d$/.test(expiresAt) ? expiresAt : `${expiresAt}Z`)
     const expiresAtMs = normalizedExpiresAt ? Date.parse(normalizedExpiresAt) : null
-    console.info('[verify/status] expires delta', {
+    logger.info('[verify/status] expires delta', {
       nick,
       expiresAt,
       normalizedExpiresAt,
@@ -94,7 +99,7 @@ export async function POST(req: Request) {
     })
 
     if (isVerificationExpired(expiresAt)) {
-      console.warn('[verify/status] code expired', { nick, expiresAt })
+      logger.warn('[verify/status] code expired', { nick, expiresAt })
       void updateUserVerification(id, {
         habbo_verification_status: 'failed',
         habbo_verification_code: null,
@@ -120,11 +125,11 @@ export async function POST(req: Request) {
     }
 
     if (!profile) {
-      console.info('[verify/status] fetching profile by name', { nick, nickname, hotel })
+      logger.info('[verify/status] fetching profile by name', { nick, nickname, hotel })
       profile = await getHabboUserByNameForHotel(nickname, hotel)
       uniqueId = profile?.uniqueId || uniqueId
       if (uniqueId) {
-        console.info('[verify/status] resolved uniqueId from name', { nick, uniqueId })
+        logger.info('[verify/status] resolved uniqueId from name', { nick, uniqueId })
         void updateUserVerification(id, { habbo_unique_id: uniqueId })
       }
     }
@@ -132,11 +137,10 @@ export async function POST(req: Request) {
     const motto = String(profile?.motto || profile?.mission || '')
 
     const contains = !!motto && motto.toUpperCase().includes(storedCode.toUpperCase())
-    console.info('[verify/status] motto check', {
+    logger.info('[verify/status] motto check', {
       nick,
       hotel,
-      storedCode,
-      mottoSnippet: motto ? motto.slice(0, 120) : '',
+      hasStoredCode: Boolean(storedCode),
       contains,
     })
 
@@ -145,10 +149,10 @@ export async function POST(req: Request) {
     }
 
     await markUserAsVerified(id)
-    console.info('[verify/status] verification success', { nick, hotel })
+    logger.info('[verify/status] verification success', { nick, hotel })
     return NextResponse.json({ verified: true, status: 'ok' })
   } catch (error: any) {
-    console.error('[verify/status] server error', error)
+    logger.error('[verify/status] server error', { message: error?.message || String(error) })
     return NextResponse.json(
       buildError(error?.message || 'Erreur serveur', { code: 'SERVER_ERROR' }),
       { status: 500 },
